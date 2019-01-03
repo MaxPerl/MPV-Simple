@@ -1,0 +1,4 @@
+mpv_handle * T_PTR
+MPV::Simple T_PTROBJ
+mpv_event * T_PTR
+MPVEvent T_PTROBJ
