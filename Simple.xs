@@ -30,17 +30,15 @@ void callp( SV* string)
     dMY_CXT;
     dSP;
     
-    // THIS WORKS! YEAH!
-    
-    //ENTER; SAVETMPS; 
+    ENTER; SAVETMPS; 
     PUSHMARK(SP);
     
-    //PUTBACK;
+    PUTBACK;
     
     perl_call_sv(MY_CXT.callback,G_DISCARD|G_NOARGS);
-    //SPAGAIN;
+    SPAGAIN;
     
-    //PUTBACK;FREETMPS;LEAVE;
+    PUTBACK;FREETMPS;LEAVE;
     
 }
 
