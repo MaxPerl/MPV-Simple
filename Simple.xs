@@ -144,7 +144,7 @@ _xs_set_wakeup_callback(MPV::Simple ctx)
     CODE:
     {
     SV* data;
-    void (*rechne)(void*);
+    void (*callp_ptr)(void*);
     callp_ptr = callp;
     data = get_sv("MPV::Simple::callback_data",0);
     mpv_set_wakeup_callback(ctx,callp_ptr,MY_CXT.callback);
