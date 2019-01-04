@@ -54,46 +54,6 @@ sub new {
     return $obj;
 }
 
-sub ctx {
-    my ($self, $cstruct) = @_;
-    
-    my $old_value = $self->{cstruct};
-	#use Devel::Peek;
-	#print "DEVEL: ".Dump ($old_value)."\n";
-	#print "CTX ".$old_value." \n";
-	$self->{cstruct} = $cstruct if (defined $cstruct);
-	
-	return $old_value;
-}
-
-
-sub set_option_string {
-    my ($self,$option,$data) = @_;
-    $self->_xs_mpv_set_option_string($option,$data);
-}
-
-sub set_property_string {
-    my ($self,$option,$data) = @_;
-    $self->_xs_mpv_set_option_string($option,$data);
-}
-
-sub initialize {
-    my ($self) = @_;
-    $self->_xs_mpv_initialize()
-}
-
-sub command {
-    my ($self) = @_;
-    $self->_xs_mpv_command();
-}
-
-sub wait_event {
-    my ($self, $timeout) = @_;
-    
-    my $event = $self->_xs_mpv_wait_event($timeout);
-    return $event;
-}
-
 sub set_wakeup_callback {
     my ($self, $callback, $userdata) = @_;
     $self->set_my_callback($callback);
@@ -103,17 +63,6 @@ sub set_wakeup_callback {
     $self->_xs_set_wakeup_callback();
     use Devel::Peek;
     Dump $callback;
-}
-
-sub event_name {
-    my ($self,$event) = @_;
-    
-    $self->_xs_mpv_event_name($event);
-}
-
-sub terminate_destroy {
-    my ($self) = @_;
-    $self->_xs_mpv_terminate_destroy()
 }
 
 
@@ -132,22 +81,6 @@ my ($class) = shift;
     my $obj = {};
     bless $obj;
     return $obj;
-}
-
-sub cstruct {
-    my ($self, $cstruct) = @_;
-     
-    my $old_value = $self->{cstruct};
-	$self->{cstruct} = $cstruct if (defined $cstruct);
-	
-	return $old_value;
-}
-
-sub id {
-    my ($self) = @_;
-    #my $event = $self->cstruct;
-    my $event = $self;
-    my $id = $self->xs_id($event);
 }
 
 1;

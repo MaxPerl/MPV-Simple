@@ -68,7 +68,7 @@ xs_create( const char *class )
 
 
 int
-_xs_mpv_set_option_string(MPV::Simple ctx, SV* option, SV* data)
+set_option_string(MPV::Simple ctx, SV* option, SV* data)
     CODE:
     {
     int ret = mpv_set_option_string( ctx, SvPV_nolen(option),SvPV_nolen(data) );
@@ -77,30 +77,39 @@ _xs_mpv_set_option_string(MPV::Simple ctx, SV* option, SV* data)
     OUTPUT: RETVAL
 
 int
-_xs_mpv_set_property_string(MPV::Simple ctx, SV* option, SV* data)
+set_property_string(MPV::Simple ctx, SV* option, SV* data)
     CODE:
     {
-    int ret = mpv_set_option_string( ctx, SvPV_nolen(option),SvPV_nolen(data) );
+    int ret = mpv_set_property_string( ctx, SvPV_nolen(option),SvPV_nolen(data) );
+    RETVAL = ret;
+    }
+    OUTPUT: RETVAL
+
+int
+set_wid(MPV::Simple ctx, int wid)
+    CODE:
+    {
+    int ret = mpv_set_property( ctx, "wid",MPV_FORMAT_INT64,wid );
     RETVAL = ret;
     }
     OUTPUT: RETVAL
     
 void
-_xs_mpv_initialize(MPV::Simple ctx)
+initialize(MPV::Simple ctx)
     CODE:
     {
         mpv_initialize(ctx);
     }
 
 void
-_xs_mpv_terminate_destroy(MPV::Simple ctx)
+terminate_destroy(MPV::Simple ctx)
     CODE:
     {
         mpv_terminate_destroy(ctx);
     }
     
 void
-_xs_mpv_command(MPV::Simple ctx)
+command(MPV::Simple ctx)
     CODE:
     {
     const char *args[] = {"loadfile", "/home/maximilian/Dokumente/perl/MPV-Simple/t/einladung2.mp4", NULL};
@@ -108,7 +117,7 @@ _xs_mpv_command(MPV::Simple ctx)
     }
     
 MPVEvent
-_xs_mpv_wait_event(MPV::Simple ctx, SV* timeout)
+wait_event(MPV::Simple ctx, SV* timeout)
     CODE:
     {
     MPVEvent ret = mpv_wait_event( ctx, SvIV(timeout) );
@@ -142,9 +151,10 @@ _xs_set_wakeup_callback(MPV::Simple ctx)
     data = get_sv("MPV::Simple::callback_data",0);
     mpv_set_wakeup_callback(ctx,rechne,MY_CXT.callback);
     }
+
     
 char *
-_xs_mpv_event_name(MPV::Simple ctx, MPVEvent event)
+event_name(MPV::Simple ctx, MPVEvent event)
 CODE:
     char * name = mpv_event_name(event->event_id);
     RETVAL = name;
@@ -154,7 +164,7 @@ OUTPUT: RETVAL
 MODULE = MPV::Simple		PACKAGE = MPVEvent
     
 int
-xs_id(self, event)
+id(self, event)
     MPVEvent event
 CODE:
     {
