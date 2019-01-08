@@ -34,10 +34,39 @@ XSLoader::load('MPV::Simple', $VERSION);
 our $callback = undef();
 our $callback_data = undef();
 
-#sub set_my_callback {
-#    my ($self, $cb) = @_;
-#    $callback = $cb;
-#}
+our @event_names = qw(
+    MPV_EVENT_NONE 
+    MPV_EVENT_SHUTDOWN
+    MPV_EVENT_LOG_MESSAGE       
+    MPV_EVENT_GET_PROPERTY_REPLY
+    MPV_EVENT_SET_PROPERTY_REPLY
+    MPV_EVENT_COMMAND_REPLY     
+    MPV_EVENT_START_FILE        
+    MPV_EVENT_END_FILE          
+    MPV_EVENT_FILE_LOADED       
+    MPV_EVENT_TRACKS_CHANGED    
+    MPV_EVENT_TRACK_SWITCHED    
+    MPV_EVENT_IDLE              
+    MPV_EVENT_PAUSE             
+    MPV_EVENT_UNPAUSE           
+    MPV_EVENT_TICK              
+    MPV_EVENT_SCRIPT_INPUT_DISPATCH 
+    MPV_EVENT_CLIENT_MESSAGE    
+    MPV_EVENT_VIDEO_RECONFIG    
+    MPV_EVENT_AUDIO_RECONFIG    
+    MPV_EVENT_METADATA_UPDATE   
+    MPV_EVENT_SEEK              
+    MPV_EVENT_PLAYBACK_RESTART  
+    MPV_EVENT_PROPERTY_CHANGE   
+    MPV_EVENT_CHAPTER_CHANGE 
+    MPV_EVENT_QUEUE_OVERFLOW 
+    MPV_EVENT_HOOK 
+    );
+
+sub set_my_callback {
+    my ($self, $cb) = @_;
+    $callback = $cb;
+}
 
 sub set_callback_data {
     my ($self, $cb) = @_;
@@ -49,6 +78,7 @@ sub new {
     my $obj = $class->xs_create();
     
     bless $obj;
+    #$obj->_set_context();
     #my $cstruct = $obj->xs_create();
     #$obj->ctx($cstruct);
     return $obj;
@@ -58,11 +88,11 @@ sub set_wakeup_callback {
     my ($self, $callback, $userdata) = @_;
     $self->set_my_callback($callback);
     $self->set_callback_data($userdata);
-    use Devel::Peek;
-    Dump $callback;
-    $self->_xs_set_wakeup_callback();
-    use Devel::Peek;
-    Dump $callback;
+    #use Devel::Peek;
+    #Dump $callback;
+    $self->_xs_set_wakeup_callback($callback);
+    #use Devel::Peek;
+    #Dump $callback;
 }
 
 
@@ -82,6 +112,7 @@ my ($class) = shift;
     bless $obj;
     return $obj;
 }
+
 
 1;
 __END__

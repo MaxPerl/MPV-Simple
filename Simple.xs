@@ -1,4 +1,4 @@
-#define PERL_NO_GET_CONTEXT
+
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
@@ -6,60 +6,72 @@
 #include "ppport.h"
 
 
-/* Global Data */
-
-#define MY_CXT_KEY "MPV::_guts" XS_VERSION
-
-typedef struct {
-    /* Put Global Data in here */
-    int dummy;		/* you can access this elsewhere as MY_CXT.dummy */
-    SV* callback;
-} my_cxt_t;
-
-START_MY_CXT
-
-
 #include <mpv/client.h>
 
 typedef mpv_handle * MPV__Simple;
 typedef mpv_event * MPVEvent;
 
-void callp( SV* string)
+static PerlInterpreter * mine;
+static PerlInterpreter * perl_for_cb;
+static int n = 1;
+
+
+void my_init(void) {
+    mine = PERL_GET_CONTEXT;
+}
+
+void callp( )
 {
+    int new_perl = 0;
+    
     dTHX;
-    dMY_CXT;
+    if ( my_perl != NULL )
+         printf ("my_perl == %ul\n", my_perl);
+      else
+      {
+         printf ("my_perl was NULL\n");
+         PERL_SET_CONTEXT(mine);
+         perl_for_cb = perl_clone(mine, CLONEf_COPY_STACKS);
+         PERL_SET_CONTEXT(perl_for_cb);
+         
+         //CLONE_PARAMS clone_param; clone_param.stashes = NULL; clone_param.flags = 0; clone_param.proto_perl = perl_for_cb;
+         
+         new_perl = 1;
+      } 
+    
     dSP;
+    SV* callback = get_sv("MPV::Simple::callback",0);
+    SV* data = get_sv("MPV::Simple::callback_data",0);
     
     ENTER; SAVETMPS; 
     PUSHMARK(SP);
     
+    EXTEND(SP,1);
+    PUSHs(sv_2mortal(newSVsv(data)));
+    
     PUTBACK;
     
-    perl_call_sv(MY_CXT.callback,G_DISCARD|G_NOARGS);
+    perl_call_sv(callback,G_DISCARD);
     SPAGAIN;
     
     PUTBACK;FREETMPS;LEAVE;
     
+    if ( new_perl ) {
+        perl_free(my_perl);
+        PERL_SET_CONTEXT(mine);
+    }
 }
+
+
 
 MODULE = MPV::Simple		PACKAGE = MPV::Simple		
 
-BOOT:
-{
-    MY_CXT_INIT;
-    /* If any of the fields in the my_cxt_t struct need
-       to be initialised, do it here.
-     */
-     MY_CXT.callback = (SV*)NULL;
-}
 
 MPV::Simple
 xs_create( const char *class )
     CODE:
         mpv_handle * handle = mpv_create();
-        //const char *args[] = {"loadfile", "./summertime.ogg", NULL};
-        //mpv_command((mpv_handle*) ctx, args);
-        
+        my_init();
 
         RETVAL = handle;
     OUTPUT: RETVAL
@@ -82,15 +94,6 @@ set_property_string(MPV::Simple ctx, SV* option, SV* data)
     RETVAL = ret;
     }
     OUTPUT: RETVAL
-
-int
-set_wid(MPV::Simple ctx, int wid)
-    CODE:
-    {
-    int ret = mpv_set_property( ctx, "wid",MPV_FORMAT_INT64,wid );
-    RETVAL = ret;
-    }
-    OUTPUT: RETVAL
     
 void
 initialize(MPV::Simple ctx)
@@ -107,10 +110,19 @@ terminate_destroy(MPV::Simple ctx)
     }
     
 void
-command(MPV::Simple ctx)
+command(MPV::Simple ctx, SV* command, SV* args, SV* args2=NULL)
     CODE:
     {
-    const char *args[] = {"loadfile", "/home/maximilian/Dokumente/perl/MPV-Simple/t/einladung2.mp4", NULL};
+    char *command_pv = SvPV_nolen(command);
+    char *args_pv = SvPV_nolen(args);
+    char *args_pv2;
+    if (args2) {
+        args_pv2 = SvPV_nolen(args2);
+    }
+    else {
+        args_pv2 = NULL;
+    }
+    const char *args[] = {command_pv, args_pv, args_pv2,NULL};
     mpv_command(ctx, args);
     }
     
@@ -123,38 +135,28 @@ wait_event(MPV::Simple ctx, SV* timeout)
     }
     OUTPUT: RETVAL
 
-
 void
-set_my_callback(ctx, fn)
-        MPV::Simple ctx
-        SV *	fn
-        PREINIT:
-            dMY_CXT;
-        CODE:
-        /* Remember the Perl sub */
-        if (MY_CXT.callback == (SV*)NULL)
-            MY_CXT.callback = newSVsv(fn);
-        else
-            SvSetSV(MY_CXT.callback, fn);
-    
-void
-_xs_set_wakeup_callback(MPV::Simple ctx)
-    PREINIT:
-            dMY_CXT;
+wakeup(MPV::Simple ctx)
     CODE:
     {
-    SV* data;
+        mpv_wakeup(ctx);
+    }
+    
+void
+_xs_set_wakeup_callback(MPV::Simple ctx, SV* callback)
+    CODE:
+    {
     void (*callp_ptr)(void*);
     callp_ptr = callp;
-    data = get_sv("MPV::Simple::callback_data",0);
-    mpv_set_wakeup_callback(ctx,callp_ptr,MY_CXT.callback);
+    mpv_set_wakeup_callback(ctx,callp_ptr,NULL);
     }
 
+
     
-char *
+const char *
 event_name(MPV::Simple ctx, MPVEvent event)
 CODE:
-    char * name = mpv_event_name(event->event_id);
+    const char * name = mpv_event_name(event->event_id);
     RETVAL = name;
 OUTPUT: RETVAL
 
@@ -162,7 +164,7 @@ OUTPUT: RETVAL
 MODULE = MPV::Simple		PACKAGE = MPVEvent
     
 int
-id(self, event)
+id(event)
     MPVEvent event
 CODE:
     {
