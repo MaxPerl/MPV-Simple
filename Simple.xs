@@ -8,6 +8,8 @@
 
 #include <mpv/client.h>
 
+//#define stdout PerlIO_stdout()
+
 typedef mpv_handle * MPV__Simple;
 typedef mpv_event * MPVEvent;
 
@@ -72,7 +74,7 @@ xs_create( const char *class )
     CODE:
         mpv_handle * handle = mpv_create();
         my_init();
-
+        printf("Creating\n");
         RETVAL = handle;
     OUTPUT: RETVAL
 
@@ -109,22 +111,29 @@ terminate_destroy(MPV::Simple ctx)
         mpv_terminate_destroy(ctx);
     }
     
-void
-command(MPV::Simple ctx, SV* command, SV* args, SV* args2=NULL)
+AV*
+command(MPV::Simple ctx, SV* command, ...)
     CODE:
     {
+    int args_num = items-2;
     char *command_pv = SvPV_nolen(command);
-    char *args_pv = SvPV_nolen(args);
-    char *args_pv2;
-    if (args2) {
-        args_pv2 = SvPV_nolen(args2);
+    //const char *args[] = {command_pv, *arguments, NULL};
+    const char *args[items];
+    int i;
+    int z =1;
+    args[0] = command_pv;
+    for (i=2; i <items; i += 1) {
+        SV *key = ST(i);
+        char *pv = SvPV_nolen(key);
+        args[z] = pv;
+        z = z+1;
     }
-    else {
-        args_pv2 = NULL;
-    }
-    const char *args[] = {command_pv, args_pv, args_pv2,NULL};
+    args[z] = NULL;
+    
     mpv_command(ctx, args);
+    RETVAL = (AV*) args;
     }
+    OUTPUT: RETVAL
     
 MPVEvent
 wait_event(MPV::Simple ctx, SV* timeout)
