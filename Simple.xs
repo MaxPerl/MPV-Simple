@@ -73,7 +73,10 @@ MPV::Simple
 xs_create( const char *class )
     CODE:
         mpv_handle * handle = mpv_create();
+        //mpv_initialize(handle);
         my_init();
+        //mpv_handle * client = mpv_create_client(handle,"perl_handle");
+        
         printf("Creating\n");
         RETVAL = handle;
     OUTPUT: RETVAL
