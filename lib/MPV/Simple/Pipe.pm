@@ -32,37 +32,49 @@ use Symbol qw(qualify_to_ref);
 use MPV::Simple;
 use strict;
 use warnings;
+use IPC::Shareable;
 
 # Avoid zombies
 $SIG{CHLD} = 'IGNORE';
     
-
+our @events;
 sub new {
     my ($reader, $writer,$reader2, $writer2);
+    my ($events_reader,$events_writer);
     
     
     # Fork
     pipe $reader, $writer;
     pipe $reader2, $writer2;
+    pipe $events_reader, $events_writer;
     $writer->autoflush(1);
     $writer2->autoflush(1);
+    $events_writer->autoflush(1);
+    
+    tie @events, "IPC::Shareable", undef, {};
+    
     my $pid = fork();
     
     if ($pid != 0) {
         close $reader;
         close $writer2;
-        my ($class) = @_;
+        close $events_writer;
+        my ($class,%opts) = @_;
         my $obj ={};
         $obj->{writer} = $writer;
         $obj->{reader} = $reader2;
+        $obj->{events} = $events_reader;
         $obj->{pid} = $pid;
+        $obj->{event_handling} = $opts{event_handling} || 0;
         bless $obj, $class;
         return $obj;
     }
     else {
         close $writer;
         close $reader2;
-        mpv($reader,$writer2);
+        close $events_reader;
+        my ($class,%opts) = @_;
+        mpv($reader,$writer2, $events_writer,%opts);
     }
 }
 
@@ -111,7 +123,7 @@ sub terminate_destroy {
 }
 
 sub mpv {
-    my ($reader,$writer2) = @_;
+    my ($reader,$writer2,$events_writer,%opts) = @_;
     my $initialized = 0;
     my $ctx = MPV::Simple->new();
     while (1) {
@@ -153,7 +165,9 @@ sub mpv {
        if ($initialized) {
             while (my $event = $ctx->wait_event(0)) {
                 my $id = $event->id();
-                #print "ID $MPV::Simple::event_names[$id] \n";
+                #print "EVENT FIRED UP\n";
+                #print $events_writer "$id\n" if ($opts{event_handling} && $id != 0);
+                push @events,$id if ($opts{event_handling} && $id != 0);
                 last unless ($id);
             }
         }
@@ -161,6 +175,7 @@ sub mpv {
             
     }
     close $writer2;
+    close $events_writer;
     close $reader;
     exit 0;
 }
@@ -205,6 +220,7 @@ DESTROY {
     if ( my $pid=$self->{pid} ) {
             close $self->{writer};
             close $self->{reader};
+            close $self->{events};
             kill(9,$pid);
     }
 }
