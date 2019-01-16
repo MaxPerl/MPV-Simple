@@ -145,7 +145,7 @@ get_property_string(MPV::Simple ctx, SV* property)
     OUTPUT: RETVAL
     
 int
-observe_property(MPV::Simple ctx, SV* property)
+observe_property_string(MPV::Simple ctx, SV* property)
     CODE:
     {
     int error = mpv_observe_property( ctx, 0, SvPV_nolen(property), 1 );
@@ -205,26 +205,38 @@ wait_event(MPV::Simple ctx, SV* timeout)
     // Copy struct contents into hash
     hv_store(hash,"id",2,newSViv(event->event_id),0);
     
+    // Data for MPV_EVENT_GET_PROPERTY_REPLY
+    // and MPV_EVENT_PROPERTY_CHANGE
     if (event->event_id == 3 || event->event_id == 22) {
         mpv_event_property * property = event->data;
         const char * name = property->name;
         hv_store(hash,"name",4,newSVpv(name,0),0);
+        // MPV_FORMAT_NONE
         if (property->format == 0) {
             hv_store(hash,"data",4,newSV(0),0);
         }
+        // MPV_FORMAT_STRING and MPV_FORMAT_OSD_STRING
         else if (property->format == 1 || property->format == 2) {
             char * data = *(char**) property->data;
             hv_store(hash,"data",4,newSVpv(data,0),0);
         }
         // TODO: The following needs tests and add mor mpv_formats
+        // MPV_FORMAT_FLAG
         else if (property->format == 3) {
             int data = *(int*) property->data;
             hv_store(hash,"data",4,newSViv(data),0);
         }
+        // MPV_FORMAT_DOUBLE
+        else if (property->format == 5) {
+            double data = *(double*) property->data;
+            hv_store(hash,"data",4,newSVnv(data),0);
+        }
         else {
-            hv_store(hash,"data",4,newSVpv("not supported",0),0);
+            hv_store(hash,"data",4,newSVpv("MPV_FORMAT_NODE and MPV_FORMAT_INT64 at the moment not supported. For the latter please use MPV_FORMAT_DOUBLE.",0),0);
         }
     }
+    
+    // Data for MPV_EVENT_END_FILE
     else if (event->event_id == 7) {
         mpv_event_end_file * data = event->data;
         int reason = data->reason;

@@ -95,10 +95,10 @@ sub get_property_string {
     return $ret;
 }
 
-sub observe_property {
+sub observe_property_string {
     my ($obj,@args) = @_;
     my $args = join('###',@args);
-    my $line = "observe_property###$args\n";
+    my $line = "observe_property_string###$args\n";
     my $writer = $obj->{writer};
     print $writer $line;
 }
