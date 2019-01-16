@@ -8,6 +8,7 @@
 
 #include <mpv/client.h>
 
+// For debugging of MPV::Simple::Pipe
 //#define stdout PerlIO_stdout()
 
 typedef mpv_handle * MPV__Simple;
@@ -17,30 +18,58 @@ static PerlInterpreter * mine;
 static PerlInterpreter * perl_for_cb;
 static int n = 1;
 
+// Stolen from SDL
+#ifdef USE_THREADS
+PerlInterpreter *parent_perl = NULL;
+extern PerlInterpreter *parent_perl;
+PerlInterpreter *current_perl = NULL;
+#define GET_TLS_CONTEXT eval_pv("require DynaLoader;", TRUE); \
+        if(!current_perl) { \
+            parent_perl = PERL_GET_CONTEXT; \
+            current_perl = perl_clone(parent_perl, CLONEf_KEEP_PTR_TABLE); \
+            PERL_SET_CONTEXT(parent_perl); \
+        }
+#define ENTER_TLS_CONTEXT { \
+            if(!PERL_GET_CONTEXT) { \
+                PERL_SET_CONTEXT(current_perl); \
+            }
+#define LEAVE_TLS_CONTEXT }
+#else
+PerlInterpreter *parent_perl = NULL;
+extern PerlInterpreter *parent_perl;
+#define GET_TLS_CONTEXT         /* TLS context not enabled */
+#define ENTER_TLS_CONTEXT       /* TLS context not enabled */
+#define LEAVE_TLS_CONTEXT       /* TLS context not enabled */
+#endif
+
+// Ende des Diebstahls
+
 
 void my_init(void) {
     mine = PERL_GET_CONTEXT;
 }
 
-void callp( )
+void callp()
 {
     int new_perl = 0;
     
-    dTHX;
-    if ( my_perl != NULL )
-         printf ("my_perl == %ul\n", my_perl);
-      else
+    //dTHX;
+    /* Meine alte Lösung
+        if ( !PERL_GET_CONTEXT )
       {
          printf ("my_perl was NULL\n");
          PERL_SET_CONTEXT(mine);
-         perl_for_cb = perl_clone(mine, CLONEf_COPY_STACKS);
+         perl_for_cb = perl_clone(mine, CLONEf_COPY_STACKS | CLONEf_KEEP_PTR_TABLE);
          PERL_SET_CONTEXT(perl_for_cb);
-         
+         printf ("my_perl == %ul\n", my_perl);
          //CLONE_PARAMS clone_param; clone_param.stashes = NULL; clone_param.flags = 0; clone_param.proto_perl = perl_for_cb;
          
          new_perl = 1;
-      } 
+      }
+    */ 
     
+    ENTER_TLS_CONTEXT;
+    //dTHX;
     dSP;
     SV* callback = get_sv("MPV::Simple::callback",0);
     SV* data = get_sv("MPV::Simple::callback_data",0);
@@ -57,11 +86,14 @@ void callp( )
     SPAGAIN;
     
     PUTBACK;FREETMPS;LEAVE;
+    LEAVE_TLS_CONTEXT;
     
-    if ( new_perl ) {
+    /* Meine alte Lösung
+        if ( new_perl ) {
         perl_free(my_perl);
         PERL_SET_CONTEXT(mine);
-    }
+        } 
+    */
 }
 
 
@@ -74,7 +106,7 @@ xs_create( const char *class )
     CODE:
         mpv_handle * handle = mpv_create();
         //mpv_initialize(handle);
-        my_init();
+        //my_init();
         //mpv_handle * client = mpv_create_client(handle,"perl_handle");
         
         printf("Creating\n");
@@ -97,6 +129,27 @@ set_property_string(MPV::Simple ctx, SV* option, SV* data)
     {
     int ret = mpv_set_property_string( ctx, SvPV_nolen(option),SvPV_nolen(data) );
     RETVAL = ret;
+    }
+    OUTPUT: RETVAL
+    
+
+SV*
+get_property_string(MPV::Simple ctx, SV* property)
+    CODE:
+    {
+    char *string = mpv_get_property_string( ctx, SvPV_nolen(property) );
+    SV* value = newSVpv(string,0);
+    mpv_free(string);
+    RETVAL = value;
+    }
+    OUTPUT: RETVAL
+    
+int
+observe_property(MPV::Simple ctx, SV* property)
+    CODE:
+    {
+    int error = mpv_observe_property( ctx, 0, SvPV_nolen(property), 1 );
+    RETVAL = error;
     }
     OUTPUT: RETVAL
     
@@ -138,12 +191,50 @@ command(MPV::Simple ctx, SV* command, ...)
     }
     OUTPUT: RETVAL
     
-MPVEvent
+HV *
 wait_event(MPV::Simple ctx, SV* timeout)
+    PREINIT:
+        HV* hash;
+        mpv_event * event;
     CODE:
     {
-    MPVEvent ret = mpv_wait_event( ctx, SvIV(timeout) );
-    RETVAL = ret;
+    event = mpv_wait_event( ctx, SvIV(timeout) );
+    
+    hash = (HV *) sv_2mortal( (SV*) newHV() );
+    
+    // Copy struct contents into hash
+    hv_store(hash,"id",2,newSViv(event->event_id),0);
+    
+    if (event->event_id == 3 || event->event_id == 22) {
+        mpv_event_property * property = event->data;
+        const char * name = property->name;
+        hv_store(hash,"name",4,newSVpv(name,0),0);
+        if (property->format == 0) {
+            hv_store(hash,"data",4,newSV(0),0);
+        }
+        else if (property->format == 1 || property->format == 2) {
+            char * data = *(char**) property->data;
+            hv_store(hash,"data",4,newSVpv(data,0),0);
+        }
+        // TODO: The following needs tests and add mor mpv_formats
+        else if (property->format == 3) {
+            int data = *(int*) property->data;
+            hv_store(hash,"data",4,newSViv(data),0);
+        }
+        else {
+            hv_store(hash,"data",4,newSVpv("not supported",0),0);
+        }
+    }
+    else if (event->event_id == 7) {
+        mpv_event_end_file * data = event->data;
+        int reason = data->reason;
+        hv_store(hash,"data",4,newSViv(reason),0);
+    }
+    else {
+        hv_store(hash,"data",4,newSV(0),0);
+    }
+    
+    RETVAL = hash;
     }
     OUTPUT: RETVAL
 
@@ -160,28 +251,7 @@ _xs_set_wakeup_callback(MPV::Simple ctx, SV* callback)
     {
     void (*callp_ptr)(void*);
     callp_ptr = callp;
+    //my_init();
+    GET_TLS_CONTEXT;
     mpv_set_wakeup_callback(ctx,callp_ptr,NULL);
     }
-
-
-    
-const char *
-event_name(MPV::Simple ctx, MPVEvent event)
-CODE:
-    const char * name = mpv_event_name(event->event_id);
-    RETVAL = name;
-OUTPUT: RETVAL
-
-
-MODULE = MPV::Simple		PACKAGE = MPVEvent
-    
-int
-id(event)
-    MPVEvent event
-CODE:
-    {
-    int id = event->event_id;
-    RETVAL=id;
-    }
-OUTPUT:
-    RETVAL

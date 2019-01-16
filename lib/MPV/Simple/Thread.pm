@@ -1,4 +1,4 @@
-package MPV::Simple::Pipe;
+package MPV::Simple::Thread;
 
 use 5.026001;
 use strict;
@@ -26,17 +26,19 @@ our @EXPORT = qw(
 	
 );
 
-use IO::Handle;
-use IO::Select;
-use Symbol qw(qualify_to_ref);
+#use IO::Handle;
+#use IO::Select;
+#use Symbol qw(qualify_to_ref);
 use MPV::Simple;
 use strict;
 use warnings;
-use IPC::Shareable;
+#use IPC::Shareable;
 #use MCE::Shared;
+use threads;
+use threads::shared;
 
 # Avoid zombies
-$SIG{CHLD} = 'IGNORE';
+#$SIG{CHLD} = 'IGNORE';
     
 our @events;
 our $events;
@@ -93,14 +95,6 @@ sub get_property_string {
     my $ret = <$reader>;
     chomp $ret;
     return $ret;
-}
-
-sub observe_property {
-    my ($obj,@args) = @_;
-    my $args = join('###',@args);
-    my $line = "observe_property###$args\n";
-    my $writer = $obj->{writer};
-    print $writer $line;
 }
 
 sub command {
@@ -169,10 +163,9 @@ sub mpv {
 
        if ($initialized) {
             while (my $event = $ctx->wait_event(0)) {
-                my $id = $event->{id};
-                
-                #print "NAME $name\n" if (defined($name));
+                my $id = $event->id();
                 (tied @events)->shlock;
+                tie $event, "IPC::Shareable", undef, {};
                 
                 push @events, $event if ($opts{event_handling} && $id != 0);
                 #$event = MCE::Shared->share({module => 'MPVEvent'});
