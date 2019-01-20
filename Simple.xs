@@ -1,15 +1,24 @@
-
+#define PERL_NO_GET_CONTEXT
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
 
 #include "ppport.h"
 
+typedef struct {
+        SV *callback;
+        SV *data;
+        int has_events;
+} my_cxt_t;
+START_MY_CXT;
+
+
+
 
 #include <mpv/client.h>
 
 // For debugging of MPV::Simple::Pipe
-//#define stdout PerlIO_stdout()
+#define stdout PerlIO_stdout()
 
 typedef mpv_handle * MPV__Simple;
 typedef mpv_event * MPVEvent;
@@ -18,31 +27,6 @@ static PerlInterpreter * mine;
 static PerlInterpreter * perl_for_cb;
 static int n = 1;
 
-// Stolen from SDL
-#ifdef USE_THREADS
-PerlInterpreter *parent_perl = NULL;
-extern PerlInterpreter *parent_perl;
-PerlInterpreter *current_perl = NULL;
-#define GET_TLS_CONTEXT eval_pv("require DynaLoader;", TRUE); \
-        if(!current_perl) { \
-            parent_perl = PERL_GET_CONTEXT; \
-            current_perl = perl_clone(parent_perl, CLONEf_KEEP_PTR_TABLE); \
-            PERL_SET_CONTEXT(parent_perl); \
-        }
-#define ENTER_TLS_CONTEXT { \
-            if(!PERL_GET_CONTEXT) { \
-                PERL_SET_CONTEXT(current_perl); \
-            }
-#define LEAVE_TLS_CONTEXT }
-#else
-PerlInterpreter *parent_perl = NULL;
-extern PerlInterpreter *parent_perl;
-#define GET_TLS_CONTEXT         /* TLS context not enabled */
-#define ENTER_TLS_CONTEXT       /* TLS context not enabled */
-#define LEAVE_TLS_CONTEXT       /* TLS context not enabled */
-#endif
-
-// Ende des Diebstahls
 
 
 void my_init(void) {
@@ -51,54 +35,26 @@ void my_init(void) {
 
 void callp()
 {
+    
     int new_perl = 0;
     
-    //dTHX;
-    /* Meine alte Lösung
-        if ( !PERL_GET_CONTEXT )
-      {
-         printf ("my_perl was NULL\n");
-         PERL_SET_CONTEXT(mine);
-         perl_for_cb = perl_clone(mine, CLONEf_COPY_STACKS | CLONEf_KEEP_PTR_TABLE);
-         PERL_SET_CONTEXT(perl_for_cb);
-         printf ("my_perl == %ul\n", my_perl);
-         //CLONE_PARAMS clone_param; clone_param.stashes = NULL; clone_param.flags = 0; clone_param.proto_perl = perl_for_cb;
-         
-         new_perl = 1;
-      }
-    */ 
+    dTHX;
+    dMY_CXT;
+    MY_CXT.has_events = 1;
     
-    ENTER_TLS_CONTEXT;
-    //dTHX;
-    dSP;
-    SV* callback = get_sv("MPV::Simple::callback",0);
-    SV* data = get_sv("MPV::Simple::callback_data",0);
     
-    ENTER; SAVETMPS; 
-    PUSHMARK(SP);
     
-    EXTEND(SP,1);
-    PUSHs(sv_2mortal(newSVsv(data)));
-    
-    PUTBACK;
-    
-    perl_call_sv(callback,G_DISCARD);
-    SPAGAIN;
-    
-    PUTBACK;FREETMPS;LEAVE;
-    LEAVE_TLS_CONTEXT;
-    
-    /* Meine alte Lösung
-        if ( new_perl ) {
-        perl_free(my_perl);
-        PERL_SET_CONTEXT(mine);
-        } 
-    */
 }
 
 
 
 MODULE = MPV::Simple		PACKAGE = MPV::Simple		
+
+
+BOOT:
+        MY_CXT_INIT;
+
+
 
 
 MPV::Simple
@@ -256,14 +212,41 @@ wakeup(MPV::Simple ctx)
     {
         mpv_wakeup(ctx);
     }
+
     
+void
+xs_set_my_callback(ctx, fn)
+        MPV::Simple ctx
+        SV *	fn
+        PREINIT:
+            dMY_CXT;
+        CODE:
+        /* Remember the Perl sub */
+        if (MY_CXT.callback == (SV*)NULL)
+            MY_CXT.callback = newSVsv(fn);
+        else
+            SvSetSV(MY_CXT.callback, fn);
+
+void
+xs_set_my_data(ctx, fn)
+        MPV::Simple ctx
+        SV *	fn
+        PREINIT:
+            dMY_CXT;
+        CODE:
+        /* Remember the Perl sub */
+        if (MY_CXT.data == (SV*)NULL)
+            MY_CXT.data = newSVsv(fn);
+        else
+            SvSetSV(MY_CXT.data, fn);
+            
+            
 void
 _xs_set_wakeup_callback(MPV::Simple ctx, SV* callback)
     CODE:
     {
+    my_init();
     void (*callp_ptr)(void*);
     callp_ptr = callp;
-    //my_init();
-    GET_TLS_CONTEXT;
     mpv_set_wakeup_callback(ctx,callp_ptr,NULL);
     }

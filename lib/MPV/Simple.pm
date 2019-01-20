@@ -62,14 +62,6 @@ our @event_names = qw(
     MPV_EVENT_QUEUE_OVERFLOW 
     MPV_EVENT_HOOK 
     );
-    
-our @end_file_reasons = qw(
-    MPV_END_FILE_REASON_EOF
-    MPV_END_FILE_REASON_STOP
-    MPV_END_FILE_REASON_QUIT
-    MPV_END_FILE_REASON_ERROR
-    MPV_END_FILE_REASON_REDIRECT
-    );
 
 sub set_my_callback {
     my ($self, $cb) = @_;
