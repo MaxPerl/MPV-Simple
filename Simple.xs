@@ -217,7 +217,7 @@ has_events(MPV::Simple ctx)
             
             
 void
-_xs_set_wakeup_callback(MPV::Simple ctx, SV* callback)
+setup_event_notification(MPV::Simple ctx)
     CODE:
     {
     //my_init();

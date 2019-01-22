@@ -63,16 +63,6 @@ our @event_names = qw(
     MPV_EVENT_HOOK 
     );
 
-sub set_my_callback {
-    my ($self, $cb) = @_;
-    $callback = $cb;
-}
-
-sub set_callback_data {
-    my ($self, $cb) = @_;
-    $callback_data = $cb;
-}
-
 sub new {
     my ($class) = shift;
     my $obj = $class->xs_create();
@@ -84,16 +74,7 @@ sub new {
     return $obj;
 }
 
-sub set_wakeup_callback {
-    my ($self, $callback, $userdata) = @_;
-    $self->set_my_callback($callback);
-    $self->set_callback_data($userdata);
-    #use Devel::Peek;
-    #Dump $callback;
-    $self->_xs_set_wakeup_callback($callback);
-    #use Devel::Peek;
-    #Dump $callback;
-}
+
 
 
 # Preloaded methods go here.

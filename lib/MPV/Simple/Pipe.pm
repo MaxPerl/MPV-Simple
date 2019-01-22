@@ -149,31 +149,25 @@ sub mpv {
     my ($reader,$writer2,$evwriter,%opts) = @_;
     my $initialized = 0;
     my $ctx = MPV::Simple->new();
-    $ctx->set_wakeup_callback(sub {});
+    $ctx->setup_event_notification();
     while (1) {
         #print "Processing events/commands\n";
         while ( my $line = <$reader> ) {
             last unless ($line);
             chomp $line;
             my ($command, @args) = split('###',$line);
-            #print "ARGS @args\n";
-            #print "Executing \$ctx->$command(@args)\n";
             if ($command eq "terminate_destroy") {
-                print "Terminate MPV::Simple..\n";
+                
                 $ctx->terminate_destroy();
                 $initialized = 0;
             }
             elsif ($command eq "get_property_string") {
                 my $return = $ctx->get_property_string(@args);
-                #use Devel::Peek;
-                #Dump $return;
                 # Don't forget \n at the end!!!
                 print $writer2 "$return\n";
             }
             else {
                 eval{
-                    #print "COMMAND $command\n";
-                    #print "ARGS @args\n";
                     $ctx->$command(@args);
                 };
                 if ($@) {
@@ -183,7 +177,7 @@ sub mpv {
             }
        }
        
-       $wakeup =$ctx->has_events;
+       $wakeup =$ctx->has_events if ($initialized);
        # The following line blocks until new events occur
        # or SIG{USR2}is fired
        if ($wakeup) {
