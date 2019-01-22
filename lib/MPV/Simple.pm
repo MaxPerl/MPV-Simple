@@ -120,25 +120,115 @@ __END__
 
 =head1 NAME
 
-MPV::Simple - Perl extension for blah blah blah
+MPV::Simple - Perl extension for libmpv
 
 =head1 SYNOPSIS
 
-  use MPV::Simple;
-  blah blah blah
+    use MPV::Simple;
+    my $ctx = MPV::Simple->new();
+    $ctx->initialize;
+    $ctx->set_property_string('input-default-bindings','yes');
+    $ctx->set_property_string('input-vo-keyboard','yes');
+    $ctx->set_property_string('osc','yes');
+
+    $ctx->command("loadfile", "/home/maximilian/Dokumente/perl/MPV-Simple/t/einladung2.mp4");
+    while (my $event = $ctx->wait_event(-1)) {
+            if ($event->{id} == 7){
+                    $ctx->terminate_destroy();
+                    last;
+            }
+    }
+
+    exit 0;
 
 =head1 DESCRIPTION
 
-Stub documentation for MPV::Simple, created by h2xs. It looks like the
-author of the extension was negligent enough to leave the stub
-unedited.
-
-Blah blah blah.
+MPV::Simple is a basic and simple binding to libmpv.
 
 =head2 EXPORT
 
 None by default.
 
+=head2 METHODS
+
+The following methods exist:
+
+=over 4
+
+=item* my $mpv = MPV::Simple->new()
+Constructs a new MPV handle
+
+=item* $mpv->initialize();
+Initialize an uninitialized mpv instance. If the mpv instance is already running, an error is retuned.
+This function needs to be called to make full use of the client API if the client API handle was created with new().
+
+=item* $mpv->set_property_string('name','value');
+Set a property to a given value. Properties are essentially variables which
+can be queried or set at runtime. For example, writing to the pause property
+will actually pause or unpause playback.
+
+=item* $mpv->get_property_string('name','value');
+Return the value of the property with the given name as string.
+
+=item* $mpv->observe_property_string('name');
+Get a notification whenever the given property changes. You will receive
+updates as MPV_EVENT_PROPERTY_CHANGE. Note that this is not very precise:
+for some properties, it may not send updates even if the property changed.
+This depends on the property, and it's a valid feature request to ask for
+better update handling of a specific property. (For some properties, like
+``clock``, which shows the wall clock, this mechanism doesn't make too
+much sense anyway.)
+
+Property changes are coalesced: the change events are returned only once the
+event queue becomes empty (e.g. mpv_wait_event() would block or return
+MPV_EVENT_NONE), and then only one event per changed property is returned.
+
+Normally, change events are sent only if the property value changes according
+to the requested format. mpv_event_property will contain the property value
+as data member.
+
+Warning: if a property is unavailable or retrieving it caused an error,
+         MPV_FORMAT_NONE will be set in mpv_event_property, even if the
+         format parameter was set to a different value. In this case, the
+         mpv_event_property.data field is invalid.
+
+If the property is observed with the format parameter set to MPV_FORMAT_NONE,
+you get low-level notifications whether the property _may_ have changed, and
+the data member in mpv_event_property will be unset. With this mode, you
+will have to determine yourself whether the property really changd. On the
+other hand, this mechanism can be faster and uses less resources.
+
+Observing a property that doesn't exist is allowed. (Although it may still
+cause some sporadic change events.)
+
+Keep in mind that you will get change notifications even if you change a
+property yourself. Try to avoid endless feedback loops, which could happen
+if you react to the change notifications triggered by your own change.
+
+Only the mpv_handle on which this was called will receive the property
+change events, or can unobserve them.
+
+
+=item* $mpv->command($command, @args);
+Send a command to the player. Commands are the same as those used in
+input.conf, except that this function takes parameters in a pre-split form.
+The commands and their parameters are documented in input.rst.
+
+=item* $mpv->wait_event($timeout)
+Wait for the next event, or until the timeout expires, or if another thread
+makes a call to mpv_wakeup(). Passing 0 as timeout will never wait, and
+is suitable for polling.
+
+The internal event queue has a limited size (per client handle). If you
+don't empty the event queue quickly enough with mpv_wait_event(), it will
+overflow and silently discard further events. If this happens, making
+asynchronous requests will fail as well (with MPV_ERROR_EVENT_QUEUE_FULL).
+
+=item* $mpv->terminate_destroy()
+Brings the player and all clients down as well, and waits until all of them are destroyed.
+Returns a hashref containing the event ID and other data.
+ 
+=back
 
 
 =head1 SEE ALSO

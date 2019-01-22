@@ -27,11 +27,13 @@ our @EXPORT = qw(
 );
 
 use IO::Handle;
-use IO::Select;
-use Symbol qw(qualify_to_ref);
 use MPV::Simple;
 use strict;
 use warnings;
+
+# Wake event loop up, when a command is passed to the mpv process
+our $wakeup;
+$SIG{USR1} = sub {$wakeup = 1};
 
 # Avoid zombies
 $SIG{CHLD} = 'IGNORE';
@@ -49,6 +51,9 @@ sub new {
     $writer->autoflush(1);
     $writer2->autoflush(1);
     $evwriter->autoflush(1);
+    $reader->blocking(0);
+    $evreader->blocking(0);
+    
     
     # Kommando Schnittstelle
     my $pid = fork();
@@ -83,12 +88,10 @@ sub set_property_string {
     my ($obj,@args) = @_;
     my $args = join('###',@args);
     my $line = "set_property_string###$args\n";
-    #(tied @commands)->shlock;
-    #push @commands,$line;
-    #(tied @commands)->shunlock;
     
     my $writer = $obj->{writer};
     print $writer $line;
+    kill(USR1 => $obj->{pid});
 }
 
 sub get_property_string {
@@ -97,11 +100,7 @@ sub get_property_string {
     my $line = "get_property_string###$args\n";
     my $writer = $obj->{writer};
     print $writer $line;
-    
-    #(tied @commands)->shlock;
-    #push @commands,$line;
-    #(tied @commands)->shunlock;
-    
+    kill(USR1 => $obj->{pid});
     
     my $reader = $obj->{reader};
     my $ret = <$reader>;
@@ -115,10 +114,7 @@ sub observe_property_string {
     my $line = "observe_property_string###$args\n";
     my $writer = $obj->{writer};
     print $writer $line;
-    
-    #(tied @commands)->shlock;
-    #push @commands,$line;
-    #(tied @commands)->shunlock;
+    kill(USR1 => $obj->{pid});
     
 }
 
@@ -128,10 +124,7 @@ sub command {
     my $line = "command###$args\n";
     my $writer = $obj->{writer};
     print $writer $line;
-    #(tied @commands)->shlock;
-    #push @commands,$line;
-    #(tied @commands)->shunlock;
-    
+    kill(USR1 => $obj->{pid});
 }
 
 sub initialize {
@@ -140,10 +133,7 @@ sub initialize {
     my $line = "initialize###$args\n";
     my $writer = $obj->{writer};
     print $writer $line;
-    #(tied @commands)->shlock;
-    #push @commands,$line;
-    #(tied @commands)->shunlock;
-    
+    kill(USR1 => $obj->{pid});
 }
 
 sub terminate_destroy {
@@ -152,28 +142,16 @@ sub terminate_destroy {
     my $line = "terminate_destroy###$args\n";
     my $writer = $obj->{writer};
     print $writer $line;
-    #(tied @commands)->shlock;
-    #push @commands,$line;
-    #(tied @commands)->shunlock;
-    
-}
-
-sub event_handler {
-    my ($evwriter, %opts) = @_;
-    sleep 5;
-    while (1) {
-    
-    }
-    exit 0;
+    kill(USR1 => $obj->{pid});
 }
 
 sub mpv {
     my ($reader,$writer2,$evwriter,%opts) = @_;
     my $initialized = 0;
     my $ctx = MPV::Simple->new();
+    $ctx->set_wakeup_callback(sub {});
     while (1) {
-        
-        $reader->blocking(0);
+        #print "Processing events/commands\n";
         while ( my $line = <$reader> ) {
             last unless ($line);
             chomp $line;
@@ -205,17 +183,21 @@ sub mpv {
             }
        }
        
-       if ($initialized) {
+       $wakeup =$ctx->has_events;
+       # The following line blocks until new events occur
+       # or SIG{USR2}is fired
+       if ($wakeup) {
         while (my $event = $ctx->wait_event(0)) {
                     my $id = $event->{id};
+                    last if ($id ==0);
                     my $name = $event->{name} || '';
                     my $data = $event->{data} || '';
                     print $evwriter "$id###$name###$data\n" if ($opts{event_handling} && $id != 0);
                     #use Storable qw(store_fd);
                     #store_fd($event,$evwriter) if ($opts{event_handling} && $id != 0);
-                    last if ($id ==0);
+                    
                 }
-        }    
+        }
             
         last if ($initialized == 0);
     }

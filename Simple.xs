@@ -2,6 +2,8 @@
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
+#include <unistd.h>
+#include <poll.h>
 
 #include "ppport.h"
 
@@ -26,23 +28,18 @@ typedef mpv_event * MPVEvent;
 static PerlInterpreter * mine;
 static PerlInterpreter * perl_for_cb;
 static int n = 1;
-
+static int pipes[2];
 
 
 void my_init(void) {
     mine = PERL_GET_CONTEXT;
 }
 
+// callp schreibt in die Pipe ein einzelnes Byte hinein
 void callp()
 {
-    
-    int new_perl = 0;
-    
-    dTHX;
-    dMY_CXT;
-    MY_CXT.has_events = 1;
-    
-    
+    write( pipes[1], &(char){0}, 1);
+    return;
     
 }
 
@@ -65,19 +62,15 @@ xs_create( const char *class )
         //my_init();
         //mpv_handle * client = mpv_create_client(handle,"perl_handle");
         
-        printf("Creating\n");
+        printf("Creating Pipes\n");
+        if ( pipe(pipes) < 0) {
+            perror ("pipe");
+            exit(EXIT_FAILURE);
+        }
+        
         RETVAL = handle;
     OUTPUT: RETVAL
 
-
-int
-set_option_string(MPV::Simple ctx, SV* option, SV* data)
-    CODE:
-    {
-    int ret = mpv_set_option_string( ctx, SvPV_nolen(option),SvPV_nolen(data) );
-    RETVAL = ret;
-    }
-    OUTPUT: RETVAL
 
 int
 set_property_string(MPV::Simple ctx, SV* option, SV* data)
@@ -120,7 +113,10 @@ void
 terminate_destroy(MPV::Simple ctx)
     CODE:
     {
+        close(pipes[0]);
+        close(pipes[1]);
         mpv_terminate_destroy(ctx);
+        
     }
     
 AV*
@@ -213,6 +209,36 @@ wakeup(MPV::Simple ctx)
         mpv_wakeup(ctx);
     }
 
+void 
+pump_event()
+    CODE:
+    write( pipes[1], &(char){0}, 1);
+    return;
+    
+int
+has_events(MPV::Simple ctx)
+    CODE:
+    int ret;
+    int pipefd = pipes[0];
+    if (pipefd < 0)
+        ret = -1;
+    else {
+        struct pollfd pfds[1] = {
+            { .fd = pipefd, .events = POLLIN },
+        };
+        poll(pfds,1,-1);
+        if (pfds[0].revents & POLLIN) {
+            char unused[256];
+            read(pipefd, unused, sizeof(unused));
+            ret = 1;
+        }
+        else {
+            ret = 0;
+        }
+    }
+    RETVAL = ret;
+    OUTPUT: RETVAL
+        
     
 void
 xs_set_my_callback(ctx, fn)
