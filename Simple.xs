@@ -7,33 +7,16 @@
 
 #include "ppport.h"
 
-typedef struct {
-        SV *callback;
-        SV *data;
-        int has_events;
-} my_cxt_t;
-START_MY_CXT;
-
-
-
-
 #include <mpv/client.h>
 
 // For debugging of MPV::Simple::Pipe
-#define stdout PerlIO_stdout()
+//#define stdout PerlIO_stdout()
 
 typedef mpv_handle * MPV__Simple;
 typedef mpv_event * MPVEvent;
 
-static PerlInterpreter * mine;
-static PerlInterpreter * perl_for_cb;
-static int n = 1;
 static int pipes[2];
 
-
-void my_init(void) {
-    mine = PERL_GET_CONTEXT;
-}
 
 // callp schreibt in die Pipe ein einzelnes Byte hinein
 void callp()
@@ -46,13 +29,6 @@ void callp()
 
 
 MODULE = MPV::Simple		PACKAGE = MPV::Simple		
-
-
-BOOT:
-        MY_CXT_INIT;
-
-
-
 
 MPV::Simple
 xs_create( const char *class )
@@ -209,11 +185,6 @@ wakeup(MPV::Simple ctx)
         mpv_wakeup(ctx);
     }
 
-void 
-pump_event()
-    CODE:
-    write( pipes[1], &(char){0}, 1);
-    return;
     
 int
 has_events(MPV::Simple ctx)
@@ -226,8 +197,13 @@ has_events(MPV::Simple ctx)
         struct pollfd pfds[1] = {
             { .fd = pipefd, .events = POLLIN },
         };
+        // Wait until there are possibly new mpv events
         poll(pfds,1,-1);
         if (pfds[0].revents & POLLIN) {
+            // Empty the pipe. Doing this before calling mpv_wait_event()
+            // ensures that no wakeups are missed. It's not so important to
+            // make sure the pipe is really empty (it will just cause some
+            // additional wakeups in unlikely corner cases).
             char unused[256];
             read(pipefd, unused, sizeof(unused));
             ret = 1;
@@ -238,40 +214,13 @@ has_events(MPV::Simple ctx)
     }
     RETVAL = ret;
     OUTPUT: RETVAL
-        
-    
-void
-xs_set_my_callback(ctx, fn)
-        MPV::Simple ctx
-        SV *	fn
-        PREINIT:
-            dMY_CXT;
-        CODE:
-        /* Remember the Perl sub */
-        if (MY_CXT.callback == (SV*)NULL)
-            MY_CXT.callback = newSVsv(fn);
-        else
-            SvSetSV(MY_CXT.callback, fn);
-
-void
-xs_set_my_data(ctx, fn)
-        MPV::Simple ctx
-        SV *	fn
-        PREINIT:
-            dMY_CXT;
-        CODE:
-        /* Remember the Perl sub */
-        if (MY_CXT.data == (SV*)NULL)
-            MY_CXT.data = newSVsv(fn);
-        else
-            SvSetSV(MY_CXT.data, fn);
             
             
 void
 _xs_set_wakeup_callback(MPV::Simple ctx, SV* callback)
     CODE:
     {
-    my_init();
+    //my_init();
     void (*callp_ptr)(void*);
     callp_ptr = callp;
     mpv_set_wakeup_callback(ctx,callp_ptr,NULL);
