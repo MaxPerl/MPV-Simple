@@ -1,8 +1,11 @@
 Changes
+lib/MPV/Simple.pm
+lib/MPV/Simple/JSON.pm
+lib/MPV/Simple/Pipe.pm
 Makefile.PL
 MANIFEST
 ppport.h
 README
 Simple.xs
 t/MPV-Simple.t
-lib/MPV/Simple.pm
+typemap
