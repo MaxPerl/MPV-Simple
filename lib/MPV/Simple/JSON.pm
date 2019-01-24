@@ -2,6 +2,10 @@ package MPV::Simple::JSON;
 
 use strict;
 use warnings;
+use IO::Handle;
+use IO::Socket::UNIX;
+use JSON;
+use File::Temp qw(tempdir);
 
 
 require Exporter;
@@ -24,14 +28,6 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw(
 	
 );
-
-
-use strict;
-use warnings;
-use IO::Handle;
-use IO::Socket::UNIX;
-use JSON;
-use File::Temp qw(tempdir);
 
 # Avoid zombies
 $SIG{CHLD} = 'IGNORE';

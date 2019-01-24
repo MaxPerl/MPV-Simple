@@ -2,6 +2,8 @@ package MPV::Simple::Pipe;
 
 use strict;
 use warnings;
+use IO::Handle;
+use MPV::Simple;
 
 
 require Exporter;
@@ -25,10 +27,6 @@ our @EXPORT = qw(
 	
 );
 
-use IO::Handle;
-use MPV::Simple;
-use strict;
-use warnings;
 
 # Wake event loop up, when a command is passed to the mpv process
 our $wakeup;
