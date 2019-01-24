@@ -229,6 +229,7 @@ sub get_events {
     chomp $line;
     my ($event_id,$name,$data) = split('###',$line);
     return {
+        event_id => $event_id,
         event => $MPV::Simple::event_names[$event_id],
         name => $name,
         data => $data,

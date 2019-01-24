@@ -19,8 +19,8 @@ static int pipes[2];
 static pthread_mutex_t pipe_lock;
 
 
-// callp schreibt in die Pipe ein einzelnes Byte hinein
-void callp()
+// callback schreibt in die Pipe ein einzelnes Byte hinein
+void callback()
 {
     //pthread_mutex_lock(&pipe_lock);
     if (pipes[0] != -1)
@@ -247,9 +247,9 @@ has_events(MPV__Simple* ctx)
 void
 setup_event_notification(MPV__Simple* ctx)
     CODE:
-    void (*callp_ptr)(void*);
-    callp_ptr = callp;
-    mpv_set_wakeup_callback(ctx,callp_ptr,NULL);
+    void (*callback_ptr)(void*);
+    callback_ptr = callback;
+    mpv_set_wakeup_callback(ctx,callback_ptr,NULL);
     
 void
 DESTROY(MPV__Simple * ctx)
