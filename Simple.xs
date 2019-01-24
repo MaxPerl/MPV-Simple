@@ -12,44 +12,61 @@
 // For debugging of MPV::Simple::Pipe
 //#define stdout PerlIO_stdout()
 
-typedef mpv_handle * MPV__Simple;
+typedef mpv_handle MPV__Simple;
 typedef mpv_event * MPVEvent;
 
 static int pipes[2];
+static pthread_mutex_t pipe_lock;
 
 
 // callp schreibt in die Pipe ein einzelnes Byte hinein
 void callp()
 {
-    write( pipes[1], &(char){0}, 1);
-    return;
+    //pthread_mutex_lock(&pipe_lock);
+    if (pipes[0] != -1)
+        write( pipes[1], &(char){0}, 1);
+    //pthread_mutex_unlock(&pipe_lock);
     
 }
 
 
-
 MODULE = MPV::Simple		PACKAGE = MPV::Simple		
 
-MPV::Simple
-xs_create( const char *class )
+MPV__Simple *
+new( const char *class )
+    PREINIT:
+        MPV__Simple * handle;
     CODE:
-        mpv_handle * handle = mpv_create();
-        //mpv_initialize(handle);
-        //my_init();
-        //mpv_handle * client = mpv_create_client(handle,"perl_handle");
-        
-        printf("Creating Pipes\n");
+        //pthread_mutex_init(&pipe_lock, NULL);
         if ( pipe(pipes) < 0) {
+            printf("Pipe creation failed\n");
             perror ("pipe");
             exit(EXIT_FAILURE);
         }
         
+        // Hier geht das Programm ab und zu baden. Keine Ahnung warum??
+        handle = mpv_create();
+        
+        //mpv_initialize(handle);
+        //my_init();
+        //MPV__Simple * client = mpv_create_client(handle,"perl_handle");
+        
         RETVAL = handle;
     OUTPUT: RETVAL
 
+const char *
+error_string(int error)
+    CODE:
+    {
+        const char * ret = mpv_error_string(error);
+        RETVAL = ret;
+    }
+    OUTPUT: RETVAL
+
+MODULE = MPV::Simple		PACKAGE = MPV__SimplePtr
 
 int
-set_property_string(MPV::Simple ctx, SV* option, SV* data)
+set_property_string(MPV__Simple* ctx, SV* option, SV* data)
     CODE:
     {
     int ret = mpv_set_property_string( ctx, SvPV_nolen(option),SvPV_nolen(data) );
@@ -59,7 +76,7 @@ set_property_string(MPV::Simple ctx, SV* option, SV* data)
     
 
 SV*
-get_property_string(MPV::Simple ctx, SV* property)
+get_property_string(MPV__Simple* ctx, SV* property)
     CODE:
     {
     char *string = mpv_get_property_string( ctx, SvPV_nolen(property) );
@@ -70,23 +87,34 @@ get_property_string(MPV::Simple ctx, SV* property)
     OUTPUT: RETVAL
     
 int
-observe_property_string(MPV::Simple ctx, SV* property)
+observe_property_string(MPV__Simple* ctx, SV* property, SV* reply_userdata)
     CODE:
     {
-    int error = mpv_observe_property( ctx, 0, SvPV_nolen(property), 1 );
+    uint64_t userdata = SvIV(reply_userdata);
+    int error = mpv_observe_property( ctx, userdata, SvPV_nolen(property), 1 );
+    RETVAL = error;
+    }
+    OUTPUT: RETVAL
+
+int
+unobserve_property_string(MPV__Simple* ctx, SV* reply_userdata)
+    CODE:
+    {
+    uint64_t userdata = SvIV(reply_userdata);
+    int error = mpv_unobserve_property( ctx, userdata);
     RETVAL = error;
     }
     OUTPUT: RETVAL
     
 void
-initialize(MPV::Simple ctx)
+initialize(MPV__Simple* ctx)
     CODE:
     {
         mpv_initialize(ctx);
     }
 
 void
-terminate_destroy(MPV::Simple ctx)
+terminate_destroy(MPV__Simple* ctx)
     CODE:
     {
         close(pipes[0]);
@@ -96,7 +124,7 @@ terminate_destroy(MPV::Simple ctx)
     }
     
 AV*
-command(MPV::Simple ctx, SV* command, ...)
+command(MPV__Simple* ctx, SV* command, ...)
     CODE:
     {
     int args_num = items-2;
@@ -120,7 +148,7 @@ command(MPV::Simple ctx, SV* command, ...)
     OUTPUT: RETVAL
     
 HV *
-wait_event(MPV::Simple ctx, SV* timeout)
+wait_event(MPV__Simple* ctx, SV* timeout)
     PREINIT:
         HV* hash;
         mpv_event * event;
@@ -133,7 +161,7 @@ wait_event(MPV::Simple ctx, SV* timeout)
     // Copy struct contents into hash
     hv_store(hash,"id",2,newSViv(event->event_id),0);
     
-    // Data for MPV_EVENT_GET_PROPERTY_REPLY
+    // Data for MPV_EVENT_GET_PROPERTY_REPLY (not supported!)
     // and MPV_EVENT_PROPERTY_CHANGE
     if (event->event_id == 3 || event->event_id == 22) {
         mpv_event_property * property = event->data;
@@ -179,7 +207,7 @@ wait_event(MPV::Simple ctx, SV* timeout)
     OUTPUT: RETVAL
 
 void
-wakeup(MPV::Simple ctx)
+wakeup(MPV__Simple* ctx)
     CODE:
     {
         mpv_wakeup(ctx);
@@ -187,7 +215,7 @@ wakeup(MPV::Simple ctx)
 
     
 int
-has_events(MPV::Simple ctx)
+has_events(MPV__Simple* ctx)
     CODE:
     int ret;
     int pipefd = pipes[0];
@@ -217,11 +245,14 @@ has_events(MPV::Simple ctx)
             
             
 void
-setup_event_notification(MPV::Simple ctx)
+setup_event_notification(MPV__Simple* ctx)
     CODE:
-    {
-    //my_init();
     void (*callp_ptr)(void*);
     callp_ptr = callp;
     mpv_set_wakeup_callback(ctx,callp_ptr,NULL);
-    }
+    
+void
+DESTROY(MPV__Simple * ctx)
+    CODE:
+    printf("Calling MPV::Simple Destructor\n");
+    Safefree(ctx);
