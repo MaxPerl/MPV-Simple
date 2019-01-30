@@ -106,12 +106,15 @@ unobserve_property_string(MPV__Simple* ctx, SV* reply_userdata)
     }
     OUTPUT: RETVAL
     
-void
+int
 initialize(MPV__Simple* ctx)
     CODE:
     {
-        mpv_initialize(ctx);
+        int ret;
+        ret = mpv_initialize(ctx);
+        RETVAL = ret;
     }
+    OUTPUT: RETVAL
 
 void
 terminate_destroy(MPV__Simple* ctx)
@@ -123,10 +126,11 @@ terminate_destroy(MPV__Simple* ctx)
         
     }
     
-AV*
+int
 command(MPV__Simple* ctx, SV* command, ...)
     CODE:
     {
+    int ret;
     int args_num = items-2;
     char *command_pv = SvPV_nolen(command);
     //const char *args[] = {command_pv, *arguments, NULL};
@@ -142,8 +146,8 @@ command(MPV__Simple* ctx, SV* command, ...)
     }
     args[z] = NULL;
     
-    mpv_command(ctx, args);
-    RETVAL = (AV*) args;
+    ret = mpv_command(ctx, args);
+    RETVAL = ret;
     }
     OUTPUT: RETVAL
     
@@ -251,8 +255,3 @@ setup_event_notification(MPV__Simple* ctx)
     callback_ptr = callback;
     mpv_set_wakeup_callback(ctx,callback_ptr,NULL);
     
-void
-DESTROY(MPV__Simple * ctx)
-    CODE:
-    printf("Calling MPV::Simple Destructor\n");
-    Safefree(ctx);

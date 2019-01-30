@@ -332,6 +332,10 @@ IMPORTANT: As Contrary to MPV::Simple  and MPV::Simple::Pipe the order of the ar
 =item* $mpv->terminate_destroy()
 Note: After terminating you cannot use the MPV object anymore. Instead you have to create a new MPV object.
 
+=head2 Error handling
+
+Every MPV method will send back a hashref as a reply indicating whether the command was run correctly, and an additional field holding the command-specific return data (it can also be null). The error key can be accessed with C<$return->{error}> and is "success" if everything went well. See L<https://mpv.io/manual/stable/#json-ipc> for details of the protocoll.
+
 =head1 SEE ALSO
 
 See also the manual of the mpv media player in L<http://mpv.io> and especially the description of the JSON IPC at L<https://mpv.io/manual/stable/#json-ipc>. 

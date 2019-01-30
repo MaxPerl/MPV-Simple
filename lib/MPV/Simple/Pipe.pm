@@ -53,7 +53,8 @@ sub new {
     
     
     # Kommando Schnittstelle
-    my $pid = fork();# or die "Could not fork: $!\n";
+    my $pid = fork();
+    die "Cannot fork: $!\n" unless (defined $pid);
     
     # Main
     my $obj ={};
@@ -89,6 +90,11 @@ sub set_property_string {
     my $writer = $obj->{writer};
     print $writer $line;
     kill(USR1 => $obj->{pid});
+    
+    my $reader = $obj->{reader};
+    my $ret = <$reader>;
+    chomp $ret;
+    return $ret;
 }
 
 sub get_property_string {
@@ -113,6 +119,10 @@ sub observe_property_string {
     print $writer $line;
     kill(USR1 => $obj->{pid});
     
+    my $reader = $obj->{reader};
+    my $ret = <$reader>;
+    chomp $ret;
+    return $ret;
 }
 
 sub unobserve_property {
@@ -123,6 +133,11 @@ sub unobserve_property {
     print $writer $line;
     kill(USR1 => $obj->{pid});
     
+    my $reader = $obj->{reader};
+    my $ret = <$reader>;
+    chomp $ret;
+    return $ret;
+    
 }
 
 sub command {
@@ -132,6 +147,11 @@ sub command {
     my $writer = $obj->{writer};
     print $writer $line;
     kill(USR1 => $obj->{pid});
+    
+    my $reader = $obj->{reader};
+    my $ret = <$reader>;
+    chomp $ret;
+    return $ret;
 }
 
 sub initialize {
@@ -141,6 +161,11 @@ sub initialize {
     my $writer = $obj->{writer};
     print $writer $line;
     kill(USR1 => $obj->{pid});
+    
+    my $reader = $obj->{reader};
+    my $ret = <$reader>;
+    chomp $ret;
+    return $ret;
 }
 
 sub terminate_destroy {
@@ -198,6 +223,7 @@ sub mpv {
 
 sub _process_command {
     my ($ctx,$line,$writer2) = @_;
+    my $return;
     chomp $line;
     my ($command, @args) = split('###',$line);
     if ($command eq "terminate_destroy") {
@@ -205,17 +231,22 @@ sub _process_command {
         $ctx->terminate_destroy();
     }
     elsif ($command eq "get_property_string") {
-        my $return = $ctx->get_property_string(@args);
+        $return = $ctx->get_property_string(@args);
         # Don't forget \n at the end!!!
         print $writer2 "$return\n";
     }
     else {
+        
         eval{
-            $ctx->$command(@args);
+            $return = $ctx->$command(@args);
         };
         if ($@) {
                 print "FEHLER:$@\n";
         }
+        
+        #use Data::Dumper;
+        #print "RET ". $return ."\n";
+        print $writer2  "$return\n";
     }
     $wakeup = 0;
 }
@@ -356,6 +387,10 @@ The following methods exist. See L<MPV::Simple> for a detailled description.
 
 =item* $mpv->terminate_destroy()
 Note: After terminating you cannot use the MPV object anymore. Instead you have to create a new MPV object.
+
+=head2 Error handling
+
+You can use MPV::Simple::error_names(), MPV::Simple::check_error() and MPV::Simple::warn_error() to handle errors. See L<MPV::Simple> for details.
 
 =head1 SEE ALSO
 

@@ -2,6 +2,7 @@ package MPV::Simple;
 
 use strict;
 use warnings;
+use Carp;
 
 
 require Exporter;
@@ -25,7 +26,7 @@ our @EXPORT = qw(
 	
 );
 
-our $VERSION = '0.4';
+our $VERSION = '0.5';
 
 require XSLoader;
 XSLoader::load('MPV::Simple', $VERSION);
@@ -65,9 +66,20 @@ our @event_names = qw(
 sub check_error {
     my ($status) = @_;
     return unless ($status);
+    #print "STATUS $status\n";
     if ($status < 0) {
         my $error_string = MPV::Simple::error_string( $status );
-        die "mpv API error: $error_string\n";
+        croak "mpv API error: $error_string\n";
+    }
+}
+
+sub warn_error {
+    my ($status) = @_;
+    return unless ($status);
+    #print "STATUS $status\n";
+    if ($status < 0) {
+        my $error_string = MPV::Simple::error_string( $status );
+        carp "mpv API error: $error_string\n";
     }
 }
 
@@ -161,6 +173,10 @@ Brings the player and all clients down as well, and waits until all of them are 
 =head2 Integrating in foreign event loop (especially interaction with GUI's)
 
 In general, the API user should run an event loop in order to receive events. This event loop should call mpv_wait_event(), which will return once a new mpv client API is available. It is also possible to integrate client API usage in other event loops (e.g. GUI toolkits). In the C-API this can be done with the mpv_set_wakeup_callback() function, and then polling for events by calling mpv_wait_event() with a 0 timeout. Unfortunately the callback function is called from a arbitrary thread so that Perl doesn't support this way (or does it? Then please help to integrate this feature). Instead you should use MPV::Simple::Pipe in this case. This let MPV run in a seperate process. MPV communicates there with the GUI part through pipes. The MPV process mainly starts an event loop in which it calls mpv_wait_event with a timeout of 0 and looks for new commands (very similar to the original C mpv_set_wakeup_callback way).
+
+=head2 Error handling
+
+In MPV 0 and positive return values always mean success, negative values are always errors. So you cannot use C<or die "...:$!\n" with MPV methods. You can use C<MPV::Simple::error_string($status)> on the returned value to get the error reason. Furthermore you can die on an error with C<MPV::Simple::check_error($mpv->command(...)> or print a warning with C<MPV::Simple::warn_error($mpv->command(...)>.
 
 =head1 SEE ALSO
 
