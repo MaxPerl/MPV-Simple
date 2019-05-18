@@ -90,7 +90,7 @@ sub warn_error {
 
 package MPVEvent;
 
-use 5.026001;
+use 5.006000;
 use strict;
 use warnings;
 

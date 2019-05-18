@@ -1,5 +1,9 @@
 Revision history for Perl extension MPV::Simple.
 
+0.06  Sat May 18 08:00
+	- Minor Bugfixes:
+	 - Update the typemap file
+	 - Support also for perl versions minor than 5.26
 0.01  Tue Jan  1 14:17:38 2019
 	- original version; created by h2xs 1.23 with options
 		-An MPV::Simple
