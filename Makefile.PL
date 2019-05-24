@@ -8,7 +8,7 @@ WriteMakefile(
     PREREQ_PM         => {JSON => 0}, # e.g., Module::Name => 1.1
     ABSTRACT_FROM     => 'lib/MPV/Simple.pm', # retrieve abstract from module
     AUTHOR            => 'Maximilian Lika <maximilian@>',
-    #LICENSE           => 'perl',
+    LICENSE           => 'perl',
     #Value must be from legacy list of licenses here
     #http://search.cpan.org/perldoc?Module%3A%3ABuild%3A%3AAPI
     LIBS              => ['-lmpv'], # e.g., '-lm'
