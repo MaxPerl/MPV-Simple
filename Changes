@@ -1,6 +1,14 @@
 Revision history for Perl extension MPV::Simple.
 
-0.06  Sat May 18 08:00
+0.63 Sun Jul 28 15:38
+	- in Simple.XS save the event pipe with the Macro MY_CXT and
+	  pass it to the callback function manually
+	  This fixes the problem with some arbitrary freezes in MPV::Simple::Pipe
+0.62 Fr  May 24 19:30
+	- Again a little POD correction
+0.61 Fr  May 24 18:00
+	- POD correction and minor bugfixes
+0.6  Sat May 18 08:00
 	- Minor Bugfixes:
 	 - Update the typemap file
 	 - Support also for perl versions minor than 5.26

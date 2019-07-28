@@ -314,22 +314,22 @@ With this pure perl module you can use the mpv media player through the JSON IPC
 
 The following methods exist. See L<MPV::Simple> for a detailled description. MPV::Simple::JSON orientates itself as far as possible to the original JSON IPC interface. Thererfore there are some differences to MPV::Simple and MPV::Simple::Pipe which are described hereafter. Furthermore you don't have to initialize the mpv player (and apart from that cannot).
 
-=item* my $mpv = MPV::Simple->new()
+=item * my $mpv = MPV::Simple->new()
 IMPORTANT: Because the mpv process is in MPV::Simple::JSON multithreaded you MUST create the MPV::Simple::Object before creating the TCL interpreter and before doing any GUI work!!!
 
-=item* $mpv->set_property_string('name','value');
+=item * $mpv->set_property_string('name','value');
 
-=item* my $ret = $mpv->get_property_string('name');
+=item * my $ret = $mpv->get_property_string('name');
 IMPORTANT: the return value is contrary to MPV::Simple or MPV::Simple::Pipe a hashref. You can access the returned value with C<$ret->{data}.
 
-=item* $mpv->observe_property_string(id,'name');
+=item * $mpv->observe_property_string(id,'name');
 IMPORTANT: As Contrary to MPV::Simple  and MPV::Simple::Pipe the order of the arguments is inverted, first id, then the name of the property.
 
-=item* $mpv->unobserve_property(registered_id);
+=item * $mpv->unobserve_property(registered_id);
 
-=item* $mpv->command($command, @args);
+=item * $mpv->command($command, @args);
 
-=item* $mpv->terminate_destroy()
+=item * $mpv->terminate_destroy()
 Note: After terminating you cannot use the MPV object anymore. Instead you have to create a new MPV object.
 
 =head2 Error handling

@@ -55,7 +55,7 @@ sub new {
     # Kommando Schnittstelle
     my $pid = fork();
     die "Cannot fork: $!\n" unless (defined $pid);
-    
+   
     # Main
     my $obj ={};
     if ($pid != 0) {
@@ -75,6 +75,7 @@ sub new {
     else {
         close $reader2;
         close $writer;
+        close $evreader;
         mpv($reader,$writer2,$evwriter,%opts);
         exit 0;
     }
@@ -184,10 +185,10 @@ sub mpv {
     
     # Process already existing commands
     # otherwise there was arbitraries deadlock.Very curious...
-    while ( my $line = <$reader> ) {
-            last unless ($line);
-            _process_command($ctx,$line,$writer2);
-       }
+    #while ( my $line = <$reader> ) {
+    #        last unless ($line);
+    #        _process_command($ctx,$line,$writer2);
+    #   }
     
     $ctx->setup_event_notification();
     
@@ -293,9 +294,9 @@ MPV::Simple::Pipe
     use MPV::Simple::Pipe;
     use Tcl::Tk;
     
-    # It is recommended to to create the MPV::Simple::Pipe object before TCL
+    # 1) It is recommended to to create the MPV::Simple::Pipe object before TCL
     # interpreter even if it seems not as necessary as in MPV::Simple::JSON
-    # If you want to handle events you have to pass a true value to the 
+    # 2) If you want to handle events you have to pass a true value to the 
     # option event_handling 
     my $mpv = MPV::Simple::Pipe->new(event_handling => 1);
     
@@ -371,21 +372,21 @@ Using MPV::Simple as a seperate process to integrate it in a foreign event loop,
 
 The following methods exist. See L<MPV::Simple> for a detailled description.
 
-=item* my $mpv = MPV::Simple->new()
+=item * my $mpv = MPV::Simple->new()
 
-=item* $mpv->initialize()
+=item * $mpv->initialize()
 
-=item* $mpv->set_property_string('name','value');
+=item * $mpv->set_property_string('name','value');
 
-=item* $mpv->get_property_string('name');
+=item * $mpv->get_property_string('name');
 
-=item* $mpv->observe_property_string('name', id);
+=item * $mpv->observe_property_string('name', id);
 
-=item* $mpv->unobserve_property(registered_id);
+=item * $mpv->unobserve_property(registered_id);
 
-=item* $mpv->command($command, @args);
+=item * $mpv->command($command, @args);
 
-=item* $mpv->terminate_destroy()
+=item * $mpv->terminate_destroy()
 Note: After terminating you cannot use the MPV object anymore. Instead you have to create a new MPV object.
 
 =head2 Error handling
