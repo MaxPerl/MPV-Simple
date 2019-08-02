@@ -282,7 +282,9 @@ MPV::Simple::JSON
     )->pack(-side => 'left');
     my $b5 = $mw->Button(
         -text   =>  "Close",
-        -command => sub {$mpv->terminate_destroy();$mw->destroy();}
+        # I recommend to destroy first the Tcl::Tk main window, and
+        # then the mpv instance
+        -command => sub {$mw->destroy();$mpv->terminate_destroy();}
     )->pack(-side => 'left');
     $int->MainLoop;
     

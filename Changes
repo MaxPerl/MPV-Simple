@@ -1,9 +1,13 @@
 Revision history for Perl extension MPV::Simple.
 
+0.64 Fr Aug 2 22:00
+	- Elimate cast from pointer to integer of different size 
+	  warning [-Wpointer-to-int-cast]
+	- Minor POD correction 
 0.63 Sun Jul 28 15:38
 	- in Simple.XS save the event pipe with the Macro MY_CXT and
 	  pass it to the callback function manually
-	  This fixes the problem with some arbitrary freezes in MPV::Simple::Pipe
+	  This seems to fix the problem with some arbitrary freezes in MPV::Simple::Pipe
 0.62 Fr  May 24 19:30
 	- Again a little POD correction
 0.61 Fr  May 24 18:00

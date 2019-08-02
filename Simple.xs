@@ -34,10 +34,11 @@ typedef mpv_event * MPVEvent;
 
 
 // callback schreibt in die Pipe ein einzelnes Byte hinein
-void callback(void *writer)
+void callback(void *d)
 {
     //if (MY_CXT.reader != -1)
-        write( (int) writer, &(char){0}, 1);
+        int writer = *(int *) d;
+        write( writer, &(char){0}, 1);
 }
 
 
@@ -284,6 +285,6 @@ setup_event_notification(MPV__Simple* ctx)
     CODE:
     void (*callback_ptr)(void*);
     callback_ptr = callback;
-    void *d = (void*) MY_CXT.writer;
+    void *d = (int *) &MY_CXT.writer;
     mpv_set_wakeup_callback(ctx,callback_ptr,d);
     
