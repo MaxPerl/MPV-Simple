@@ -1,4 +1,3 @@
-#define PERL_NO_GET_CONTEXT
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
@@ -14,7 +13,9 @@
 typedef struct {
     /* Put Global Data in here */
     int reader;
-    int writer;		/* you can access this elsewhere as MY_CXT.pipes */
+    int writer; /* you can access this elsewhere as MY_CXT.pipes */
+    SV* callback;
+    SV* data;
 } my_cxt_t;
 
 START_MY_CXT
@@ -30,6 +31,32 @@ START_MY_CXT
 typedef mpv_handle MPV__Simple;
 typedef mpv_event * MPVEvent;
 
+
+// stolen from Perl SDL
+#ifdef USE_THREADS
+#define HAVE_TLS_CONTEXT
+#endif
+
+PerlInterpreter *parent_perl = NULL;
+extern PerlInterpreter *parent_perl;
+PerlInterpreter *current_perl = NULL;
+#ifdef HAVE_TLS_CONTEXT
+#define GET_TLS_CONTEXT if(!current_perl) { \
+            parent_perl = PERL_GET_CONTEXT; \
+            current_perl = perl_clone(parent_perl, CLONEf_KEEP_PTR_TABLE); \
+            PERL_SET_CONTEXT(parent_perl); \
+        }
+#define ENTER_TLS_CONTEXT { \
+            if(!PERL_GET_CONTEXT) { \
+                PERL_SET_CONTEXT(current_perl); \
+            }
+#define LEAVE_TLS_CONTEXT }
+#else
+#define GET_TLS_CONTEXT         /* TLS context not enabled */
+#define ENTER_TLS_CONTEXT       /* TLS context not enabled */
+#define LEAVE_TLS_CONTEXT       /* TLS context not enabled */
+#endif
+
 //static int pipes[2];
 
 
@@ -41,6 +68,38 @@ void callback(void *d)
         write( writer, &(char){0}, 1);
 }
 
+void callp (char* cmd )
+{
+    if(!PERL_GET_CONTEXT) { \
+        PERL_SET_CONTEXT(current_perl); \
+    }
+    
+    dTHX;
+    dMY_CXT;
+	dSP;
+
+	int count;
+
+	ENTER;
+	SAVETMPS;
+	PUSHMARK(SP);
+	 XPUSHs(sv_2mortal(newSVsv(MY_CXT.data)));
+     //XPUSHs(MY_CXT.data);
+	PUTBACK;
+
+	count = call_pv(cmd,G_SCALAR);
+    //count = call_sv(MY_CXT.callback,G_SCALAR);
+
+	SPAGAIN;
+
+	//if (count != 1 ) croak("callback returned more than 1 value\n");	
+	//	ret_interval = POPi;
+
+	PUTBACK;
+	FREETMPS;
+	LEAVE;
+	LEAVE_TLS_CONTEXT
+}
 
 MODULE = MPV::Simple		PACKAGE = MPV::Simple		
 
@@ -54,6 +113,9 @@ BOOT:
      */
      MY_CXT.reader = -1;
      MY_CXT.writer = -1;
+     
+    PL_perl_destruct_level = 2;
+	GET_TLS_CONTEXT
 }
 
 MPV__Simple *
@@ -288,3 +350,46 @@ setup_event_notification(MPV__Simple* ctx)
     void *d = (int *) &MY_CXT.writer;
     mpv_set_wakeup_callback(ctx,callback_ptr,d);
     
+
+void
+set_my_callback(ctx, fn)
+        MPV__Simple* ctx
+        SV *    fn
+        PREINIT:
+            dMY_CXT;
+        CODE:
+        /* Remember the Perl sub */
+         if (MY_CXT.callback == (SV*)NULL)
+            MY_CXT.callback = newSVsv(fn);
+        else
+            SvSetSV(MY_CXT.callback, fn);
+
+void
+set_my_data(ctx, fn)
+        MPV__Simple* ctx
+        SV *    fn
+        PREINIT:
+            dMY_CXT;
+        CODE:
+        /* Remember the Perl sub */
+         if (MY_CXT.data == (SV*)NULL)
+            MY_CXT.data = newSVsv(fn);
+        else
+            SvSetSV(MY_CXT.data, fn);
+    
+void
+set_wakeup_callback(MPV__Simple* ctx, char* cmd)
+    PREINIT:
+            dMY_CXT;
+    CODE:
+    {
+    SV* data;
+    
+    if(!current_perl) { 
+        parent_perl = PERL_GET_CONTEXT; 
+        current_perl = perl_clone(parent_perl, CLONEf_KEEP_PTR_TABLE); 
+        PERL_SET_CONTEXT(parent_perl); 
+    }
+    
+    mpv_set_wakeup_callback(ctx,(void (*)(void *) )callp,cmd);
+    }
