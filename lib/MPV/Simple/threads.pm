@@ -5,6 +5,7 @@ use warnings;
 use threads;
 use threads::shared;
 use Thread::Queue;
+use Time::HiRes qw(usleep);
 
 
 require Exporter;
@@ -46,7 +47,7 @@ sub new {
     
     # Kommando Schnittstelle
     my $thr = threads->create(\&mpv,$MainQueue, $ChildQueue, $EventQueue, $opts{event_handling});
-    #$thr->detach();
+    $thr->detach();
     
     # Main
     my $obj ={};
@@ -63,16 +64,19 @@ sub new {
     
 }
 
-sub set_property_string {
+sub AUTOLOAD {
     my ($obj,@args) = @_;
+    our $AUTOLOAD;
+    
+    # trim package name
+    my $func = $AUTOLOAD; 
+    $func =~ s/.*:://;
+    
     my $args = join('###',@args);
-    my $line = "set_property_string###$args\n";
+    my $line = "$func###$args\n";
     
     my $writer = $obj->{MainQueue};
     $writer->enqueue($line);
-    
-    my $thr = $obj->{evthread};
-    $thr->kill('USR1');
     
     my $reader = $obj->{ChildQueue};
     my $ret = $reader->dequeue();
@@ -81,95 +85,6 @@ sub set_property_string {
     return $ret;
 }
 
-sub get_property_string {
-    my ($obj,@args) = @_;
-    my $args = join('###',@args);
-    my $line = "get_property_string###$args\n";
-    
-    my $writer = $obj->{MainQueue};
-    $writer->enqueue($line);
-    
-    my $thr = $obj->{evthread};
-    $thr->kill('USR1');
-    
-    my $reader = $obj->{ChildQueue};
-    my $ret = $reader->dequeue();
-    chomp $ret;
-    return $ret;
-}
-
-sub observe_property_string {
-    my ($obj,@args) = @_;
-    my $args = join('###',@args);
-    my $line = "observe_property_string###$args\n";
-    
-    my $writer = $obj->{MainQueue};
-    $writer->enqueue($line);
-    
-    my $thr = $obj->{evthread};
-    $thr->kill('USR1');
-    
-    my $reader = $obj->{ChildQueue};
-    my $ret = $reader->dequeue();
-    chomp $ret;
-    return $ret;
-}
-
-sub unobserve_property {
-    my ($obj,@args) = @_;
-    my $args = join('###',@args);
-    my $line = "unobserve_property_string###$args\n";
-    
-    my $writer = $obj->{MainQueue};
-    $writer->enqueue($line);
-    
-    my $thr = $obj->{evthread};
-    $thr->kill('USR1');
-    
-    my $reader = $obj->{ChildQueue};
-    my $ret = $reader->dequeue();
-    chomp $ret;
-    return $ret;    
-}
-
-sub command {
-    my ($obj,@args) = @_;
-    my $args = join('###',@args);
-    my $line = "command###$args\n";
-    
-    my $writer = $obj->{MainQueue};
-    $writer->enqueue($line);
-    
-    my $thr = $obj->{evthread};
-    $thr->kill('USR1');
-    
-    my $reader = $obj->{ChildQueue};
-    my $ret = $reader->dequeue();
-    
-    chomp $ret;
-    return $ret;
-}
-
-sub initialize {
-    my ($obj,@args) = @_;
-    my $args = join('###',@args);
-    my $line = "initialize###$args\n";
-    
-    my $writer = $obj->{MainQueue};
-    $writer->enqueue($line);
-    
-    my $thr = $obj->{evthread};
-    $thr->kill('USR1');
-    
-    
-    my $reader = $obj->{ChildQueue};
-    my $ret = $reader->dequeue();
-    
-    chomp $ret;
-    return $ret;
-}
-
-# TODO: Bis hierher ist alles gleich!!! Mach ein AUTOLOAD daraus!!!
 
 sub terminate_destroy {
     my ($obj,@args) = @_;
@@ -177,35 +92,26 @@ sub terminate_destroy {
     my $line = "terminate_destroy###$args\n";
     my $writer = $obj->{MainQueue};
     $writer->enqueue($line);
+    #sleep(1);
     
-    my $thr = $obj->{evthread};
-    $thr->kill('USR1');
+    #my $thr = $obj->{evthread};
+    #$process_events=undef;
+    #my $ret = $thr->join();
     
-    my $reader = $obj->{ChildQueue};
-    my $ret = $reader->dequeue();
-    
-    $process_events = undef;
-    $thr->join;
-    #threads->exit() if threads->can('exit');
+    threads->exit() if threads->can('exit');
 }
 
 # Child thread!
 sub mpv {
     my ($MainQueue, $ChildQueue, $EventQueue, $event_handling) = @_;
-    print "WAKEUP_STATUS $wakeup\n";
+    
     use MPV::Simple;
     my $ctx = MPV::Simple->new() or die "Could not create MPV instance: $!\n";
     
-    # Process already existing commands
-    # otherwise there was arbitraries deadlock.Very curious...
-    #while ( my $line = <$reader> ) {
-    #        last unless ($line);
-    #        _process_command($ctx,$line,$writer2);
-    #   }
-    
     #$ctx->setup_event_notification();
-    $ctx->set_my_data(threads->self);
-    $ctx->set_wakeup_callback('MPV::Simple::threads::fire');
+    
+    # New implementation
+    $ctx->set_wakeup_callback('MPV::Simple::threads::wakeup');
     
     
     while ($process_events) {
@@ -219,35 +125,28 @@ sub mpv {
        
        # The following line blocks until new events occur
        # or SIG{USR2}is fired
-       if ($wakeup && $process_events) {
-        while (my $event = $ctx->wait_event(0)) {
-                    my $id = $event->{id};
-                    last if ($id ==0);
-                    my $name = $event->{name} || '';
-                    my $data = $event->{data} || '';
-                    my $line ="$id###$name###$data\n";
-                    
-                    $EventQueue->enqueue($line) if ($event_handling && $id != 0);
-                    #print $evwriter "$id###$name###$data\n" if ($opts{event_handling} && $id != 0);
-                    #use Storable qw(store_fd);
-                    #store_fd($event,$evwriter) if ($opts{event_handling} && $id != 0);
-                    
-                }
-                # With signaled we avoid race conditions
-                lock($wakeup);
-                $wakeup=0 unless ($signaled);
-                $signaled = 0;
-        }
+       while ($wakeup) {
+        $wakeup = 0;
         
+            while (my $event = $ctx->wait_event(0)) {
+                        my $id = $event->{id};
+                        last if ($id == 0);
+                        my $name = $event->{name} || '';
+                        my $data = $event->{data} || '';
+                        my $event_name = $MPV::Simple::event_names[$id];
+                        $EventQueue->enqueue("$id###$name###$data###$event_name\n") if ($event_handling && $id != 0);
+                    }
+            }
+            
+        # We have to add a little sleep to save CPU!    
+        usleep(100);
             
     }
     return 1;
 }
 
-sub fire {
-    my ($thr) = @_;
-    #$thr->kill('USR1');
-    $signaled=1;lock($wakeup); $wakeup = 1
+sub wakeup {
+    $wakeup = 1;
 }
 
 sub _process_command {
@@ -255,9 +154,9 @@ sub _process_command {
     my $return;
     chomp $line;
     my ($command, @args) = split('###',$line);
-    if ($command eq "terminate_destroy") {
+    if ($command eq "terminate_destroy" || $command eq "destroy") {
         $ctx->terminate_destroy();
-        $ChildQueue->enqueue("Shutting down\n");
+        #$ChildQueue->enqueue("Shutting down\n");
     }
     elsif ($command eq "get_property_string") {
         $return = $ctx->get_property_string(@args);
@@ -287,10 +186,10 @@ sub get_events {
     
     return undef unless ($line);
     chomp $line;
-    my ($event_id,$name,$data) = split('###',$line);
+    my ($event_id,$name,$data,$event_name) = split('###',$line);
     return {
         event_id => $event_id,
-        event => $MPV::Simple::event_names[$event_id],
+        event => $event_name,
         name => $name,
         data => $data,
     };
