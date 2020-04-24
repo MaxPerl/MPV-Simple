@@ -1,4 +1,3 @@
-#define PERL_NO_GET_CONTEXT
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
@@ -14,7 +13,9 @@
 typedef struct {
     /* Put Global Data in here */
     int reader;
-    int writer;		/* you can access this elsewhere as MY_CXT.pipes */
+    int writer; /* you can access this elsewhere as MY_CXT.pipes */
+    SV* callback;
+    SV* data;
 } my_cxt_t;
 
 START_MY_CXT
@@ -30,6 +31,32 @@ START_MY_CXT
 typedef mpv_handle MPV__Simple;
 typedef mpv_event * MPVEvent;
 
+
+// stolen from Perl SDL
+#ifdef USE_THREADS
+#define HAVE_TLS_CONTEXT
+#endif
+
+PerlInterpreter *parent_perl = NULL;
+extern PerlInterpreter *parent_perl;
+PerlInterpreter *current_perl = NULL;
+#ifdef HAVE_TLS_CONTEXT
+#define GET_TLS_CONTEXT if(!current_perl) { \
+            parent_perl = PERL_GET_CONTEXT; \
+            current_perl = perl_clone(parent_perl, CLONEf_KEEP_PTR_TABLE); \
+            PERL_SET_CONTEXT(parent_perl); \
+        }
+#define ENTER_TLS_CONTEXT { \
+            if(!PERL_GET_CONTEXT) { \
+                PERL_SET_CONTEXT(current_perl); \
+            }
+#define LEAVE_TLS_CONTEXT }
+#else
+#define GET_TLS_CONTEXT         /* TLS context not enabled */
+#define ENTER_TLS_CONTEXT       /* TLS context not enabled */
+#define LEAVE_TLS_CONTEXT       /* TLS context not enabled */
+#endif
+
 //static int pipes[2];
 
 
@@ -41,6 +68,38 @@ void callback(void *d)
         write( writer, &(char){0}, 1);
 }
 
+void callp (char* cmd )
+{
+    if(!PERL_GET_CONTEXT) { \
+        PERL_SET_CONTEXT(current_perl); \
+    }
+    
+    dTHX;
+    dMY_CXT;
+	dSP;
+
+	int count;
+
+	ENTER;
+	SAVETMPS;
+	PUSHMARK(SP);
+	 XPUSHs(sv_2mortal(newSVsv(MY_CXT.data)));
+     //XPUSHs(MY_CXT.data);
+	PUTBACK;
+
+	count = call_pv(cmd,G_SCALAR);
+    //count = call_sv(MY_CXT.callback,G_SCALAR);
+
+	SPAGAIN;
+
+	//if (count != 1 ) croak("callback returned more than 1 value\n");	
+	//	ret_interval = POPi;
+
+	PUTBACK;
+	FREETMPS;
+	LEAVE;
+	LEAVE_TLS_CONTEXT
+}
 
 MODULE = MPV::Simple		PACKAGE = MPV::Simple		
 
@@ -54,6 +113,9 @@ BOOT:
      */
      MY_CXT.reader = -1;
      MY_CXT.writer = -1;
+     
+    PL_perl_destruct_level = 2;
+	GET_TLS_CONTEXT
 }
 
 MPV__Simple *
@@ -70,12 +132,8 @@ new( const char *class )
         }   
         MY_CXT.reader = pipes[0];
         MY_CXT.writer = pipes[1];
-        // Hier geht das Programm ab und zu baden. Keine Ahnung warum??
-        handle = mpv_create();
         
-        //mpv_initialize(handle);
-        //my_init();
-        //MPV__Simple * client = mpv_create_client(handle,"perl_handle");
+        handle = mpv_create();
         
         RETVAL = handle;
     OUTPUT: RETVAL
@@ -89,61 +147,53 @@ error_string(int error)
     }
     OUTPUT: RETVAL
 
-MODULE = MPV::Simple		PACKAGE = MPV__SimplePtr
+MODULE = MPV::Simple		PACKAGE = MPV__SimplePtr  PREFIX = mpv_
 
 int
-set_property_string(MPV__Simple* ctx, SV* option, SV* data)
-    CODE:
-    {
-    int ret = mpv_set_property_string( ctx, SvPV_nolen(option),SvPV_nolen(data) );
-    RETVAL = ret;
-    }
-    OUTPUT: RETVAL
+mpv_set_property_string(MPV__Simple* ctx, char* option, char* data)
+    
     
 
-SV*
-get_property_string(MPV__Simple* ctx, SV* property)
-    CODE:
-    {
-    char *string = mpv_get_property_string( ctx, SvPV_nolen(property) );
-    SV* value = newSVpv(string,0);
-    mpv_free(string);
-    RETVAL = value;
-    }
-    OUTPUT: RETVAL
+char*
+mpv_get_property_string(MPV__Simple* ctx, char* property)
+    
     
 int
-observe_property_string(MPV__Simple* ctx, SV* property, SV* reply_userdata)
+mpv_observe_property_string(MPV__Simple* ctx, char* property, int reply_userdata)
     CODE:
     {
-    uint64_t userdata = SvIV(reply_userdata);
-    int error = mpv_observe_property( ctx, userdata, SvPV_nolen(property), 1 );
+    int error = mpv_observe_property( ctx, reply_userdata, property, 1 );
     RETVAL = error;
     }
     OUTPUT: RETVAL
 
 int
-unobserve_property_string(MPV__Simple* ctx, SV* reply_userdata)
+mpv_unobserve_property_string(MPV__Simple* ctx, int reply_userdata)
     CODE:
     {
-    uint64_t userdata = SvIV(reply_userdata);
-    int error = mpv_unobserve_property( ctx, userdata);
+    int error = mpv_unobserve_property( ctx, reply_userdata);
     RETVAL = error;
     }
     OUTPUT: RETVAL
     
 int
-initialize(MPV__Simple* ctx)
-    CODE:
-    {
-        int ret;
-        ret = mpv_initialize(ctx);
-        RETVAL = ret;
-    }
-    OUTPUT: RETVAL
+mpv_initialize(MPV__Simple* ctx)
+    
 
 void
-terminate_destroy(MPV__Simple* ctx)
+mpv_terminate_destroy(MPV__Simple* ctx)
+    PREINIT:
+    	dMY_CXT;
+    CODE:
+    {
+        close(MY_CXT.reader);
+        close(MY_CXT.writer);
+        mpv_terminate_destroy(ctx);
+        
+    }
+
+void
+mpv_destroy(MPV__Simple* ctx)
     PREINIT:
     	dMY_CXT;
     CODE:
@@ -155,17 +205,16 @@ terminate_destroy(MPV__Simple* ctx)
     }
     
 int
-command(MPV__Simple* ctx, SV* command, ...)
+mpv_command(MPV__Simple* ctx, char* command, ...)
     CODE:
     {
     int ret;
     int args_num = items-2;
-    char *command_pv = SvPV_nolen(command);
-    //const char *args[] = {command_pv, *arguments, NULL};
+    
     const char *args[items];
     int i;
     int z =1;
-    args[0] = command_pv;
+    args[0] = command;
     for (i=2; i <items; i += 1) {
         SV *key = ST(i);
         char *pv = SvPV_nolen(key);
@@ -180,13 +229,13 @@ command(MPV__Simple* ctx, SV* command, ...)
     OUTPUT: RETVAL
     
 HV *
-wait_event(MPV__Simple* ctx, SV* timeout)
+mpv_wait_event(MPV__Simple* ctx, int timeout)
     PREINIT:
         HV* hash;
         mpv_event * event;
     CODE:
     {
-    event = mpv_wait_event( ctx, SvIV(timeout) );
+    event = mpv_wait_event( ctx, timeout );
     
     hash = (HV *) sv_2mortal( (SV*) newHV() );
     
@@ -238,12 +287,9 @@ wait_event(MPV__Simple* ctx, SV* timeout)
     }
     OUTPUT: RETVAL
 
+    
 void
-wakeup(MPV__Simple* ctx)
-    CODE:
-    {
-        mpv_wakeup(ctx);
-    }
+mpv_wakeup(MPV__Simple* ctx)
 
     
 int
@@ -260,7 +306,7 @@ has_events(MPV__Simple* ctx)
             { .fd = pipefd, .events = POLLIN },
         };
         // Wait until there are possibly new mpv events
-        poll(pfds,1,-1);
+        poll(pfds,1,0);
         if (pfds[0].revents & POLLIN) {
             // Empty the pipe. Doing this before calling mpv_wait_event()
             // ensures that no wakeups are missed. It's not so important to
@@ -288,3 +334,46 @@ setup_event_notification(MPV__Simple* ctx)
     void *d = (int *) &MY_CXT.writer;
     mpv_set_wakeup_callback(ctx,callback_ptr,d);
     
+
+void
+set_my_callback(ctx, fn)
+    MPV__Simple* ctx
+    SV *    fn
+    PREINIT:
+      dMY_CXT;
+    CODE:
+    /* Remember the Perl sub */
+    if (MY_CXT.callback == (SV*)NULL)
+        MY_CXT.callback = newSVsv(fn);
+    else
+        SvSetSV(MY_CXT.callback, fn);
+
+void
+set_my_data(ctx, fn)
+    MPV__Simple* ctx
+    SV *    fn
+    PREINIT:
+        dMY_CXT;
+    CODE:
+    /* Remember the Perl sub */
+    if (MY_CXT.data == (SV*)NULL)
+        MY_CXT.data = newSVsv(fn);
+    else
+        SvSetSV(MY_CXT.data, fn);
+    
+void
+mpv_set_wakeup_callback(MPV__Simple* ctx, char* cmd)
+    PREINIT:
+            dMY_CXT;
+    CODE:
+    {
+    SV* data;
+    
+    if(!current_perl) { 
+        parent_perl = PERL_GET_CONTEXT; 
+        current_perl = perl_clone(parent_perl, CLONEf_KEEP_PTR_TABLE); 
+        PERL_SET_CONTEXT(parent_perl); 
+    }
+    
+    mpv_set_wakeup_callback(ctx,(void (*)(void *) )callp,cmd);
+    }
