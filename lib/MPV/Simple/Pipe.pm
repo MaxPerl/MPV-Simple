@@ -4,7 +4,10 @@ use strict;
 use warnings;
 use IO::Handle;
 use MPV::Simple;
-
+use Storable qw(freeze thaw);
+use Time::HiRes qw(usleep);
+use threads;
+use threads::shared;
 
 require Exporter;
 
@@ -29,8 +32,8 @@ our @EXPORT = qw(
 
 
 # Wake event loop up, when a command is passed to the mpv process
-our $wakeup;
-$SIG{USR1} = sub {$wakeup = 1};
+#our $wakeup;
+our $wakeup :shared;
 
 # Avoid zombies
 $SIG{CHLD} = 'IGNORE';
@@ -71,7 +74,7 @@ sub new {
         bless $obj, $class;
         return $obj;
     }
-    # Command Handler
+    # Event Handler
     else {
         close $reader2;
         close $writer;
@@ -83,99 +86,32 @@ sub new {
     
 }
 
-sub set_property_string {
-    my ($obj,@args) = @_;
-    my $args = join('###',@args);
-    my $line = "set_property_string###$args\n";
-    
-    my $writer = $obj->{writer};
-    print $writer $line;
-    kill(USR1 => $obj->{pid});
-    
-    my $reader = $obj->{reader};
-    my $ret = <$reader>;
-    chomp $ret;
-    return $ret;
-}
-
-sub get_property_string {
-    my ($obj,@args) = @_;
-    my $args = join('###',@args);
-    my $line = "get_property_string###$args\n";
-    my $writer = $obj->{writer};
-    print $writer $line;
-    kill(USR1 => $obj->{pid});
-    
-    my $reader = $obj->{reader};
-    my $ret = <$reader>;
-    chomp $ret;
-    return $ret;
-}
-
-sub observe_property_string {
-    my ($obj,@args) = @_;
-    my $args = join('###',@args);
-    my $line = "observe_property_string###$args\n";
-    my $writer = $obj->{writer};
-    print $writer $line;
-    kill(USR1 => $obj->{pid});
-    
-    my $reader = $obj->{reader};
-    my $ret = <$reader>;
-    chomp $ret;
-    return $ret;
-}
-
-sub unobserve_property {
-    my ($obj,@args) = @_;
-    my $args = join('###',@args);
-    my $line = "unobserve_property###$args\n";
-    my $writer = $obj->{writer};
-    print $writer $line;
-    kill(USR1 => $obj->{pid});
-    
-    my $reader = $obj->{reader};
-    my $ret = <$reader>;
-    chomp $ret;
-    return $ret;
-    
-}
-
-sub command {
-    my ($obj,@args) = @_;
-    my $args = join('###',@args);
-    my $line = "command###$args\n";
-    my $writer = $obj->{writer};
-    print $writer $line;
-    kill(USR1 => $obj->{pid});
-    
-    my $reader = $obj->{reader};
-    my $ret = <$reader>;
-    chomp $ret;
-    return $ret;
-}
-
-sub initialize {
-    my ($obj,@args) = @_;
-    my $args = join('###',@args);
-    my $line = "initialize###$args\n";
-    my $writer = $obj->{writer};
-    print $writer $line;
-    kill(USR1 => $obj->{pid});
-    
-    my $reader = $obj->{reader};
-    my $ret = <$reader>;
-    chomp $ret;
-    return $ret;
-}
-
 sub terminate_destroy {
     my ($obj,@args) = @_;
     my $args = join('###',@args);
     my $line = "terminate_destroy###$args\n";
     my $writer = $obj->{writer};
     print $writer $line;
-    kill(USR1 => $obj->{pid});
+}
+
+sub AUTOLOAD {
+    my ($obj,@args) = @_;
+    our $AUTOLOAD;
+    
+    # trim package name
+    my $func = $AUTOLOAD; 
+    $func =~ s/.*:://;
+    
+    my $args = join('###',@args);
+    my $line = "$func###$args\n";
+    
+    my $writer = $obj->{writer};
+    print $writer $line;
+    
+    my $reader = $obj->{reader};
+    my $ret = <$reader>;
+    chomp $ret;
+    return $ret;
 }
 
 sub mpv {
@@ -183,43 +119,47 @@ sub mpv {
     
     my $ctx = MPV::Simple->new() or die "Could not create MPV instance: $!\n";
     
-    # Process already existing commands
-    # otherwise there was arbitraries deadlock.Very curious...
-    #while ( my $line = <$reader> ) {
-    #        last unless ($line);
-    #        _process_command($ctx,$line,$writer2);
-    #   }
+    #New implementation: use mpv_set_wakeup_callback
+    $ctx->set_wakeup_callback('MPV::Simple::Pipe::wakeup');
     
-    $ctx->setup_event_notification();
+    #old implementation:
+    #$ctx->setup_event_notification();
     
     while (1) {
-        #print "Processing events/commands\n";
-        while ( my $line = <$reader> ) {
+        
+        while ( defined(my $line = <$reader>) ) {
             last unless ($line);
             _process_command($ctx,$line,$writer2);
-       }
-       
-       my $n = $ctx->has_events;;
-       # The following line blocks until new events occur
-       # or SIG{USR2}is fired
-       if ($wakeup || $n) {
-        while (my $event = $ctx->wait_event(0)) {
-                    my $id = $event->{id};
-                    last if ($id ==0);
-                    my $name = $event->{name} || '';
-                    my $data = $event->{data} || '';
-                    print $evwriter "$id###$name###$data\n" if ($opts{event_handling} && $id != 0);
-                    #use Storable qw(store_fd);
-                    #store_fd($event,$evwriter) if ($opts{event_handling} && $id != 0);
-                    
-                }
         }
+        
+        #old implementation
+        #my $wakeup = $ctx->has_events;
+        
+        while ($wakeup) {
+            $wakeup = 0;
+            
+            while (my $event = $ctx->wait_event(0)) {
+                        my $id = $event->{id};
+                        last if ($id == 0);
+                        my $name = $event->{name} || '';
+                        my $data = $event->{data} || '';
+                        my $event_name = $MPV::Simple::event_names[$id];
+                        print $evwriter "$id###$name###$data###$event_name\n" if ($opts{event_handling} && $id != 0);
+                    }
+            }
+            
+        # We have to add a little sleep to save CPU!    
+        usleep(100);
             
     }
     close $writer2;
     close $evwriter;
     close $reader;
     exit 0;
+}
+
+sub wakeup {
+    $wakeup = 1;
 }
 
 sub _process_command {
@@ -245,24 +185,26 @@ sub _process_command {
                 print "FEHLER:$@\n";
         }
         
-        #use Data::Dumper;
-        #print "RET ". $return ."\n";
         print $writer2  "$return\n";
     }
-    $wakeup = 0;
+    
 }
 
 sub get_events {
     my ($self) = @_;
     my $evreader = $self->{evreader};
-    #my $line = $evreader->getline || undef;
+    
     my $line = <$evreader>;
     return undef unless ($line);
     chomp $line;
-    my ($event_id,$name,$data) = split('###',$line);
+    
+    #my $event = thaw($line);
+    #return $event;
+    
+    my ($event_id,$name,$data,$event_name) = split('###',$line);
     return {
         event_id => $event_id,
-        event => $MPV::Simple::event_names[$event_id],
+        event => $event_name,
         name => $name,
         data => $data,
     };
