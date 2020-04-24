@@ -32,32 +32,10 @@ typedef mpv_handle MPV__Simple;
 typedef mpv_event * MPVEvent;
 
 
-// stolen from Perl SDL
-#ifdef USE_THREADS
-#define HAVE_TLS_CONTEXT
-#endif
-
+// We need multiple perl interpreters
 PerlInterpreter *parent_perl = NULL;
 extern PerlInterpreter *parent_perl;
 PerlInterpreter *current_perl = NULL;
-#ifdef HAVE_TLS_CONTEXT
-#define GET_TLS_CONTEXT if(!current_perl) { \
-            parent_perl = PERL_GET_CONTEXT; \
-            current_perl = perl_clone(parent_perl, CLONEf_KEEP_PTR_TABLE); \
-            PERL_SET_CONTEXT(parent_perl); \
-        }
-#define ENTER_TLS_CONTEXT { \
-            if(!PERL_GET_CONTEXT) { \
-                PERL_SET_CONTEXT(current_perl); \
-            }
-#define LEAVE_TLS_CONTEXT }
-#else
-#define GET_TLS_CONTEXT         /* TLS context not enabled */
-#define ENTER_TLS_CONTEXT       /* TLS context not enabled */
-#define LEAVE_TLS_CONTEXT       /* TLS context not enabled */
-#endif
-
-//static int pipes[2];
 
 
 // callback schreibt in die Pipe ein einzelnes Byte hinein
@@ -70,6 +48,7 @@ void callback(void *d)
 
 void callp (char* cmd )
 {
+    {
     if(!PERL_GET_CONTEXT) { \
         PERL_SET_CONTEXT(current_perl); \
     }
@@ -92,13 +71,12 @@ void callp (char* cmd )
 
 	SPAGAIN;
 
-	//if (count != 1 ) croak("callback returned more than 1 value\n");	
-	//	ret_interval = POPi;
-
 	PUTBACK;
 	FREETMPS;
 	LEAVE;
-	LEAVE_TLS_CONTEXT
+    
+    }
+	
 }
 
 MODULE = MPV::Simple		PACKAGE = MPV::Simple		
@@ -115,7 +93,6 @@ BOOT:
      MY_CXT.writer = -1;
      
     PL_perl_destruct_level = 2;
-	GET_TLS_CONTEXT
 }
 
 MPV__Simple *
