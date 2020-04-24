@@ -200,7 +200,7 @@ mpv_destroy(MPV__Simple* ctx)
     {
         close(MY_CXT.reader);
         close(MY_CXT.writer);
-        mpv_terminate_destroy(ctx);
+        mpv_destroy(ctx);
         
     }
     
