@@ -235,9 +235,10 @@ MPV::Simple::Pipe
     use utf8;
     use MPV::Simple::Pipe;
     use Tcl::Tk;
+    use Time::HiRes qw(usleep);
     
     # 1) It is recommended to to create the MPV::Simple::Pipe object before TCL
-    # interpreter even if it seems not as necessary as in MPV::Simple::JSON
+    # interpreter because this forks and copies the perl environment
     # 2) If you want to handle events you have to pass a true value to the 
     # option event_handling 
     my $mpv = MPV::Simple::Pipe->new(event_handling => 1);
@@ -259,10 +260,6 @@ MPV::Simple::Pipe
     
     # Load a video file
     $mpv->command("loadfile", "path_to_video.ogg");
-    
-    # For handling events you must repeatly call a event handler.
-    # I think, it is enough to call the event handler every 500/1000ms
-    $int->call('after',1000,\&handle_events);
     
     my $b1 = $mw->Button(
         -text   =>  "Play",
@@ -286,26 +283,40 @@ MPV::Simple::Pipe
         # then the mpv instance
         -command => sub {$mw->destroy();$mpv->terminate_destroy();}
     )->pack(-side => 'left');
-    $int->MainLoop;
+    
+    # In this example the Tcl loop coexists with the MPV loop
+    # see L<https://docstore.mik.ua/orelly/perl3/tk/ch15_09.htm>
+    # Another approach (especially if coexisting loops are not possible) 
+    # would be using a timer, see MPV::Simple:JSON for an example
+    loop($int);
+    
+    sub loop {
+        my $int = shift;
+        while ($int->Eval("info commands .")) { 
+            while (my $stat = $int->DoOneEvent(Tcl::DONT_WAIT) ) {}
+            while (my $event = $mpv->get_events() ){handle_event($event);}
+            
+            # Important: We add a little sleep to save CPU!
+            usleep(100);
+        }
+        print "Shuting down..\n";
+        $mpv->terminate_destroy();
+    }
     
     # Event handler
     # If you set $opt{event_handling} to a true value in the constructor
     # the events are sent through a non-blocking pipe ($mpv->{evreader}) you can access 
-    # by the method $mpv->get_events(); which returns a hashref of the event
+    # events by the method $mpv->get_events(); which returns a hashref of the event
     # The event_ids can be translated to the event names with the global array 
     # $MPV::Simple::event_names[$id]
-    sub handle_events {
-        while ( my $event = $mpv->get_events() ) {
-            if ($event->{event} eq "property-change") {
-                    print "prop ".$event->{name}." changed to ".$event->{data}." %\n";
-            }
-            else {
-                    print $event->{event}."\n";
-            }
+    sub handle_event {
+        my $event = shift;
+        if ($event->{event} eq "property-change") {
+            print "prop ".$event->{name}." changed to ".$event->{data}." %\n";
         }
-    
-    # Don't forget to call the event handler repeatly
-    $int->call('after',1000,\&handle_events);
+        else {
+            print $event->{event}."\n";
+        }
     }
     
 =head1 DESCRIPTION
