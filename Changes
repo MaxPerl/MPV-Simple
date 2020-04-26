@@ -1,5 +1,7 @@
 Revision history for Perl extension MPV::Simple.
 
+0.66 Sun Apr 26 11:00
+    - Delete mpv_destroy because it isn't used at the moment and leads to errors
 0.65 Fr Apr 24 21:00
     - Clean up Code
     - Support of mpv_set_wakeup_callback (and calling the callback from foreign thread!)
