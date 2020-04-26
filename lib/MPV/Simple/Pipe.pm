@@ -72,6 +72,7 @@ sub new {
         $obj->{evreader} = $evreader;
         $obj->{event_handling} = $opts{event_handling} || 0;
         bless $obj, $class;
+        usleep(100);
         return $obj;
     }
     # Event Handler
@@ -250,16 +251,22 @@ MPV::Simple::Pipe
     # Create the video frame
     my $f = $mw->Frame(-width => 640, -height => 480)->pack(-expand =>1,-fill => "both");
     
-    $mpv->initialize();
-    
-    # With the MPV property "wid" you can embed MPV in a foreign window
-    $mpv->set_property_string("wid",$f->id());
-    
-    # The video shall start paused here
-    $mpv->set_property_string('pause','yes');
-    
-    # Load a video file
-    $mpv->command("loadfile", "path_to_video.ogg");
+    # Until the video frame is mapped, we set up the MPV Player in this video frame
+    $f->bind('<Map>' => sub {
+        $f->bind('<Map>' => sub {});
+        
+        $mpv->initialize();
+        
+        # The video shall start paused here
+        $mpv->set_property_string("pause","yes");
+        
+        # With the MPV property "wid" you can embed MPV in a foreign window
+        # (therefore it was important, that $f is already mapped!)
+        $mpv->set_property_string("wid",$f->id());
+        
+        # Load a video file
+        $mpv->command("loadfile", "path_to_video.ogg");
+    });
     
     my $b1 = $mw->Button(
         -text   =>  "Play",
