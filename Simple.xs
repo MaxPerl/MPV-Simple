@@ -10,6 +10,28 @@
 
 #define MY_CXT_KEY "MPV::Simple::_guts" XS_VERSION
 
+#ifdef USE_ITHREADS
+#define GET_CONTEXT eval_pv("require DynaLoader;", TRUE); \
+        if(!current_perl) { \
+        parent_perl = PERL_GET_CONTEXT; \
+        current_perl = perl_clone(parent_perl, CLONEf_KEEP_PTR_TABLE); \
+        PERL_SET_CONTEXT(parent_perl); \
+    }
+
+#define ENTER_CONTEXT { \
+    if(!PERL_GET_CONTEXT) { \
+        PERL_SET_CONTEXT(current_perl); \
+    }
+
+#define LEAVE_CONTEXT }
+
+#else
+#define GET_CONTEXT         /* TLS context not enabled */
+#define ENTER_CONTEXT       /* TLS context not enabled */
+#define LEAVE_CONTEXT       /* TLS context not enabled */
+
+#endif
+
 typedef struct {
     /* Put Global Data in here */
     int reader;
@@ -48,10 +70,7 @@ void callback(void *d)
 
 void callp (char* cmd )
 {
-    {
-    if(!PERL_GET_CONTEXT) { \
-        PERL_SET_CONTEXT(current_perl); \
-    }
+    ENTER_CONTEXT;
     
     dTHX;
     dMY_CXT;
@@ -75,7 +94,7 @@ void callp (char* cmd )
 	FREETMPS;
 	LEAVE;
     
-    }
+    LEAVE_CONTEXT
 	
 }
 
@@ -334,11 +353,7 @@ mpv_set_wakeup_callback(MPV__Simple* ctx, char* cmd)
     {
     SV* data;
     
-    if(!current_perl) { 
-        parent_perl = PERL_GET_CONTEXT; 
-        current_perl = perl_clone(parent_perl, CLONEf_KEEP_PTR_TABLE); 
-        PERL_SET_CONTEXT(parent_perl); 
-    }
+    GET_CONTEXT;
     
     mpv_set_wakeup_callback(ctx,(void (*)(void *) )callp,cmd);
     }
