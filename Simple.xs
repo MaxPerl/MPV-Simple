@@ -168,18 +168,6 @@ mpv_terminate_destroy(MPV__Simple* ctx)
         mpv_terminate_destroy(ctx);
         
     }
-
-void
-mpv_destroy(MPV__Simple* ctx)
-    PREINIT:
-    	dMY_CXT;
-    CODE:
-    {
-        close(MY_CXT.reader);
-        close(MY_CXT.writer);
-        mpv_destroy(ctx);
-        
-    }
     
 int
 mpv_command(MPV__Simple* ctx, char* command, ...)
